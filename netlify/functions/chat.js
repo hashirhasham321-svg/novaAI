@@ -1,29 +1,39 @@
 
 exports.handler = async (event) => {
+  const json = (statusCode, data) => ({
+    statusCode,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+
   if (event.httpMethod !== "POST") {
-    return {
-      statusCode: 405,
-      body: JSON.stringify({ error: "Method not allowed" })
-    };
+    return json(405, { error: "Method not allowed" });
   }
 
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (!apiKey) {
+    return json(500, { error: "GEMINI_API_KEY is missing in Netlify." });
+  }
+
+  let message;
+
   try {
-    const { message } = JSON.parse(event.body || "{}");
-    const apiKey = process.env.GEMINI_API_KEY;
+    message = JSON.parse(event.body || "{}").message;
+  } catch {
+    return json(400, { error: "Invalid request body." });
+  }
 
-    if (!apiKey) {
-      throw new Error("Gemini API key missing in Netlify.");
-    }
+  if (typeof message !== "string" || !message.trim()) {
+    return json(400, { error: "Message is required." });
+  }
 
-    if (typeof message !== "string" || !message.trim()) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ error: "Message is required." })
-      };
-    }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 22000);
 
+  try {
     const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent",
       {
         method: "POST",
         headers: {
@@ -42,36 +52,41 @@ exports.handler = async (event) => {
           }],
           generationConfig: {
             temperature: 0.7,
-            maxOutputTokens: 2048
+            maxOutputTokens: 1024
           }
-        })
+        }),
+        signal: controller.signal
       }
     );
 
     const data = await response.json();
 
     if (!response.ok) {
-      return {
-        statusCode: response.status,
-        body: JSON.stringify({
-          error: data.error?.message || "Gemini API error"
-        })
-      };
+      return json(response.status, {
+        error: data.error?.message || "Gemini API error"
+      });
     }
 
     const reply = data.candidates?.[0]?.content?.parts
       ?.map(part => part.text || "")
       .join("") || "No answer generated.";
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ reply })
-    };
+    return json(200, { reply });
 
   } catch (error) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: error.message })
-    };
+    console.error("Nova AI error:", error);
+
+    if (error.name === "AbortError") {
+      return json(504, {
+        error: "Gemini took too long to respond. Please try again."
+      });
+    }
+
+    return json(500, {
+      error: error.message || "AI request failed."
+    });
+
+  } finally {
+    clearTimeout(timeout);
   }
 };
