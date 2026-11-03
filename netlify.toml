@@ -1,3 +1,4 @@
+
 [build]
   publish = "."
   functions = "netlify/functions"
@@ -6,3 +7,4 @@
   from = "/api/chat"
   to = "/.netlify/functions/chat"
   status = 200
+  force = true
