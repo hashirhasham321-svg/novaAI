@@ -11,41 +11,30 @@ exports.handler = async (event) => {
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
-
-  if (!apiKey) {
-    return json(500, { error: "GEMINI_API_KEY is missing in Netlify." });
-  }
+  if (!apiKey) return json(500, { error: "Gemini API key missing." });
 
   let message;
-
   try {
     message = JSON.parse(event.body || "{}").message;
   } catch {
-    return json(400, { error: "Invalid request body." });
+    return json(400, { error: "Invalid request." });
   }
 
   if (typeof message !== "string" || !message.trim()) {
     return json(400, { error: "Message is required." });
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 22000);
+  const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent";
 
-  try {
-    const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent",
-      {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const response = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "x-goog-api-key": apiKey
         },
         body: JSON.stringify({
-          systemInstruction: {
-            parts: [{
-              text: "You are Nova AI, a helpful assistant. Answer clearly in English, Urdu or Roman Urdu."
-            }]
-          },
           contents: [{
             role: "user",
             parts: [{ text: message.trim() }]
@@ -54,39 +43,39 @@ exports.handler = async (event) => {
             temperature: 0.7,
             maxOutputTokens: 1024
           }
-        }),
-        signal: controller.signal
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        const reply = data.candidates?.[0]?.content?.parts
+          ?.map(part => part.text || "").join("");
+
+        return json(200, { reply: reply || "No answer generated." });
       }
-    );
 
-    const data = await response.json();
+      if (response.status !== 503 && response.status !== 429) {
+        return json(response.status, {
+          error: data.error?.message || "Gemini API error."
+        });
+      }
 
-    if (!response.ok) {
-      return json(response.status, {
-        error: data.error?.message || "Gemini API error"
-      });
+      if (attempt === 2) {
+        return json(503, {
+          error: "Gemini is busy right now. Please try again shortly."
+        });
+      }
+
+    } catch (error) {
+      console.error("Gemini request failed:", error);
+      if (attempt === 2) {
+        return json(500, { error: "Could not connect to Gemini." });
+      }
     }
 
-    const reply = data.candidates?.[0]?.content?.parts
-      ?.map(part => part.text || "")
-      .join("") || "No answer generated.";
-
-    return json(200, { reply });
-
-  } catch (error) {
-    console.error("Nova AI error:", error);
-
-    if (error.name === "AbortError") {
-      return json(504, {
-        error: "Gemini took too long to respond. Please try again."
-      });
-    }
-
-    return json(500, {
-      error: error.message || "AI request failed."
-    });
-
-  } finally {
-    clearTimeout(timeout);
+    await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
   }
+
+  return json(503, { error: "Gemini is temporarily unavailable." });
 };
