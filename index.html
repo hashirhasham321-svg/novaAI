@@ -11,37 +11,60 @@
 :root{--bg:#10111a;--panel:#191b28;--text:#f5f5fa;--muted:#999caf;--accent:#8067ff;--border:#292b3a}
 body.light{--bg:#f4f5fb;--panel:#fff;--text:#202235;--muted:#73768a;--border:#e4e5ed}
 body{background:var(--bg);color:var(--text);font-family:Arial,sans-serif;height:100vh;overflow:hidden}
-button,input{font:inherit}
+button,input,textarea{font:inherit}
+button{cursor:pointer}
 .app{display:flex;height:100vh}
 .sidebar{width:255px;background:var(--panel);border-right:1px solid var(--border);padding:20px;display:flex;flex-direction:column;gap:20px}
-.logo{font-size:25px;font-weight:bold;color:var(--accent)}.logo span{color:var(--text)}
-.newchat{background:var(--accent);color:white;border:0;padding:13px;border-radius:10px;cursor:pointer;font-size:15px}
-.history-title{color:var(--muted);font-size:12px}.history{overflow-y:auto;flex:1}
+.logo{font-size:25px;font-weight:bold;color:var(--accent)}
+.logo span{color:var(--text)}
+.newchat{background:var(--accent);color:white;border:0;padding:13px;border-radius:10px;font-size:15px}
+.history-title{color:var(--muted);font-size:12px}
+.history{overflow-y:auto;flex:1}
 .history-item{padding:12px;border-radius:8px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);margin-top:5px}
 .history-item:hover,.history-item.active{background:var(--bg);color:var(--text)}
-.sidebar-bottom{display:flex;gap:10px}.sidebar-bottom button{flex:1;padding:10px;border:1px solid var(--border);background:transparent;color:var(--text);border-radius:8px;cursor:pointer}
-.main{flex:1;display:flex;flex-direction:column;min-width:0}.topbar{height:65px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 25px}
-.topbar h2{font-size:19px}.status{font-size:12px;color:#45c98b}
+.sidebar-bottom{display:flex;gap:10px}
+.sidebar-bottom button{flex:1;padding:10px;border:1px solid var(--border);background:transparent;color:var(--text);border-radius:8px}
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.topbar{height:65px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 25px}
+.topbar h2{font-size:19px}
+.status{font-size:12px;color:#45c98b}
 .messages{flex:1;overflow-y:auto;padding:30px 8%;display:flex;flex-direction:column;gap:22px}
-.welcome{text-align:center;margin:auto;max-width:600px}.welcome h1{font-size:38px;margin-bottom:12px}.welcome h1 span{color:var(--accent)}
+.welcome{text-align:center;margin:auto;max-width:600px}
+.welcome h1{font-size:38px;margin-bottom:12px}
+.welcome h1 span{color:var(--accent)}
 .welcome p{color:var(--muted);line-height:1.6}
 .message{max-width:850px;width:100%;margin:0 auto;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere}
-.message.user{text-align:right}.bubble{display:inline-block;padding:14px 18px;border-radius:15px;background:var(--panel);text-align:left;max-width:90%}
+.message.user{text-align:right}
+.bubble{display:inline-block;padding:14px 18px;border-radius:15px;background:var(--panel);text-align:left;max-width:90%}
 .user .bubble{background:var(--accent);color:white}
-.composer-area{padding:15px 8% 22px}.composer{max-width:850px;margin:auto;display:flex;gap:10px;background:var(--panel);border:1px solid var(--border);padding:10px;border-radius:16px;align-items:flex-end}
-textarea{flex:1;resize:none;max-height:150px;min-height:42px;background:transparent;border:0;outline:0;color:var(--text);padding:12px;font:15px Arial}
-.action{border:0;background:var(--accent);color:white;width:43px;height:43px;border-radius:12px;cursor:pointer;font-size:18px}
-.action.secondary{background:transparent;color:var(--muted)}.hint{text-align:center;color:var(--muted);font-size:11px;margin-top:12px}
+.composer-area{padding:15px 8% 22px}
+.composer{max-width:850px;margin:auto;display:flex;gap:10px;background:var(--panel);border:1px solid var(--border);padding:10px;border-radius:16px;align-items:flex-end}
+textarea{flex:1;resize:none;max-height:150px;min-height:42px;background:transparent;border:0;outline:0;color:var(--text);padding:12px}
+.action{border:0;background:var(--accent);color:white;width:43px;height:43px;border-radius:12px;font-size:18px}
+.action.secondary{background:transparent;color:var(--muted)}
+.hint{text-align:center;color:var(--muted);font-size:11px;margin-top:12px}
 .account{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
 .auth-wrap{position:fixed;inset:0;background:var(--bg);z-index:10;display:flex;align-items:center;justify-content:center;padding:20px}
 .auth-card{width:100%;max-width:410px;background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:28px}
-.auth-card h1{font-size:27px;margin-bottom:8px}.auth-card p{color:var(--muted);line-height:1.5;margin-bottom:20px}
+.auth-card h1{font-size:27px;margin:22px 0 8px}
+.auth-card p{color:var(--muted);line-height:1.5;margin-bottom:15px}
 .auth-card input{width:100%;padding:13px;margin:7px 0;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:9px}
-.auth-card button{width:100%;padding:13px;margin-top:10px;background:var(--accent);color:white;border:0;border-radius:9px;cursor:pointer}
+.auth-card button{width:100%;padding:13px;margin-top:10px;background:var(--accent);color:white;border:0;border-radius:9px}
+.auth-card button:disabled{opacity:.6;cursor:wait}
 .auth-card button.alt{background:transparent;border:1px solid var(--border);color:var(--text)}
 .auth-note{font-size:13px!important;margin-top:14px!important;min-height:18px}
 .hidden{display:none!important}
-@media(max-width:650px){.sidebar{width:65px;padding:12px 7px}.logo{font-size:17px;text-align:center}.logo span,.newchat .label,.history-title,.history,.sidebar-bottom button span,.account{display:none}.newchat{font-size:20px;padding:12px 5px}.sidebar-bottom{flex-direction:column}.messages{padding:20px 12px}.composer-area{padding:12px}.welcome h1{font-size:29px}.topbar{padding:0 14px}}
+@media(max-width:650px){
+.sidebar{width:65px;padding:12px 7px}
+.logo{font-size:17px;text-align:center}
+.logo span,.newchat .label,.history-title,.history,.sidebar-bottom button span,.account{display:none}
+.newchat{font-size:20px;padding:12px 5px}
+.sidebar-bottom{flex-direction:column}
+.messages{padding:20px 12px}
+.composer-area{padding:12px}
+.welcome h1{font-size:29px}
+.topbar{padding:0 14px}
+}
 </style>
 </head>
 <body>
@@ -57,16 +80,26 @@ textarea{flex:1;resize:none;max-height:150px;min-height:42px;background:transpar
    <button onclick="logout()">↪ <span>Logout</span></button>
   </div>
  </aside>
+
  <main class="main">
-  <header class="topbar"><h2>✦ Nova AI</h2><div class="status" id="status">● Ready</div></header>
+  <header class="topbar">
+   <h2>✦ Nova AI</h2>
+   <div class="status" id="status">● Ready</div>
+  </header>
   <section class="messages" id="messages">
-   <div class="welcome" id="welcome"><h1>Hello, I'm <span>Nova.</span></h1><p>Your intelligent AI assistant. Ask me anything, explore ideas, learn something new or get help with your work.</p></div>
+   <div class="welcome" id="welcome">
+    <h1>Hello, I'm <span>Nova.</span></h1>
+    <p>Your intelligent AI assistant. Ask me anything, explore ideas, learn something new or get help with your work.</p>
+   </div>
   </section>
-  <div class="composer-area"><div class="composer">
-   <textarea id="prompt" placeholder="Message Nova AI..." rows="1" onkeydown="handleKey(event)"></textarea>
-   <button class="action secondary" onclick="voiceInput()" title="Voice input">🎙</button>
-   <button class="action" onclick="sendMessage()" title="Send">➤</button>
-  </div><div class="hint">Nova AI can make mistakes. Check important information.</div></div>
+  <div class="composer-area">
+   <div class="composer">
+    <textarea id="prompt" placeholder="Message Nova AI..." rows="1" onkeydown="handleKey(event)"></textarea>
+    <button class="action secondary" onclick="voiceInput()" title="Voice input">🎙</button>
+    <button class="action" onclick="sendMessage()" title="Send">➤</button>
+   </div>
+   <div class="hint">Nova AI can make mistakes. Check important information.</div>
+  </div>
  </main>
 </div>
 
@@ -77,144 +110,412 @@ textarea{flex:1;resize:none;max-height:150px;min-height:42px;background:transpar
   <p id="authDescription">Log in to access your private chats.</p>
   <input id="authEmail" type="email" placeholder="Email address" autocomplete="email">
   <input id="authPassword" type="password" placeholder="Password (at least 6 characters)" autocomplete="current-password">
-  <button id="authSubmit" onclick="submitAuth()">Log in</button>
-  <button class="alt" id="authSwitch" onclick="switchAuth()">Create a new account</button>
-  <p class="auth-note" id="authNote"></p>
+  <button id="authSubmit" type="button" onclick="submitAuth()">Log in</button>
+  <button class="alt" id="authSwitch" type="button" onclick="switchAuth()">Create a new account</button>
+  <p class="auth-note" id="authNote" aria-live="polite"></p>
  </div>
 </div>
 
 <script>
+"use strict";
+
+/* SUPABASE CONFIGURATION */
 const SUPABASE_URL = "https://tehtdnaziyjwuacfxzsk.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_k50vs5oP1POySSKevkaSYw_fgPn7O_T";
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
+let supabaseClient = null;
 let currentUser = null;
 let chats = [];
 let currentChat = null;
 let busy = false;
 let authMode = "login";
+let authListenerStarted = false;
 
-function setAuthNote(text){document.getElementById("authNote").textContent=text;}
-function switchAuth(){
+function el(id) {
+ return document.getElementById(id);
+}
+
+function setNote(message) {
+ el("authNote").textContent = message;
+}
+
+function setStatus(message) {
+ el("status").textContent = "● " + message;
+}
+
+function welcomeHTML() {
+ return `<div class="welcome" id="welcome">
+  <h1>Hello, I'm <span>Nova.</span></h1>
+  <p>Your intelligent AI assistant. What would you like to explore today?</p>
+ </div>`;
+}
+
+/* AUTH SCREEN */
+function switchAuth() {
  authMode = authMode === "login" ? "signup" : "login";
- document.getElementById("authHeading").textContent = authMode === "login" ? "Welcome back" : "Create your account";
- document.getElementById("authDescription").textContent = authMode === "login" ? "Log in to access your private chats." : "Sign up to save your chats privately.";
- document.getElementById("authSubmit").textContent = authMode === "login" ? "Log in" : "Create account";
- document.getElementById("authSwitch").textContent = authMode === "login" ? "Create a new account" : "I already have an account";
- setAuthNote("");
+
+ el("authHeading").textContent =
+  authMode === "login" ? "Welcome back" : "Create your account";
+
+ el("authDescription").textContent =
+  authMode === "login"
+  ? "Log in to access your private chats."
+  : "Sign up to save your chats privately.";
+
+ el("authSubmit").textContent =
+  authMode === "login" ? "Log in" : "Create account";
+
+ el("authSwitch").textContent =
+  authMode === "login"
+  ? "Create a new account"
+  : "I already have an account";
+
+ el("authPassword").value = "";
+ setNote("");
 }
-async function submitAuth(){
- const email=document.getElementById("authEmail").value.trim();
- const password=document.getElementById("authPassword").value;
- if(!email || !password){setAuthNote("Enter your email and password.");return;}
- if(password.length<6){setAuthNote("Password must be at least 6 characters.");return;}
- const btn=document.getElementById("authSubmit");btn.disabled=true;btn.textContent="Please wait...";
- try{
-  if(authMode==="signup"){
-   const {data,error}=await supabaseClient.auth.signUp({email,password});
-   if(error)throw error;
-   if(data.session){setAuthNote("Account created. Signing you in...");}
-   else{setAuthNote("Account created! Check your email to confirm, then log in.");}
-  }else{
-   const {error}=await supabaseClient.auth.signInWithPassword({email,password});
-   if(error)throw error;
+
+async function submitAuth() {
+ if (!supabaseClient) {
+  setNote("Supabase connection is not ready. Refresh the page.");
+  return;
+ }
+
+ const email = el("authEmail").value.trim();
+ const password = el("authPassword").value;
+
+ if (!email || !password) {
+  setNote("Please enter your email and password.");
+  return;
+ }
+
+ if (password.length < 6) {
+  setNote("Password must be at least 6 characters.");
+  return;
+ }
+
+ const button = el("authSubmit");
+ button.disabled = true;
+ button.textContent = "Please wait...";
+ setNote("");
+
+ try {
+  if (authMode === "signup") {
+   const { data, error } = await supabaseClient.auth.signUp({
+    email: email,
+    password: password
+   });
+
+   if (error) throw error;
+
+   if (data.session) {
+    setNote("Account created. Signing you in...");
+   } else {
+    setNote("Account created! Check your email to confirm, then log in.");
+   }
+  } else {
+   const { error } = await supabaseClient.auth.signInWithPassword({
+    email: email,
+    password: password
+   });
+
+   if (error) throw error;
+   setNote("Login successful!");
   }
- }catch(e){setAuthNote(e.message||"Authentication failed.");}
- finally{btn.disabled=false;btn.textContent=authMode==="login"?"Log in":"Create account";}
-}
-async function logout(){
- await supabaseClient.auth.signOut();
- currentUser=null;chats=[];currentChat=null;
- document.getElementById("authScreen").classList.remove("hidden");
- document.getElementById("messages").innerHTML=welcomeHTML();
- document.getElementById("history").innerHTML="";
-}
-function welcomeHTML(){return '<div class="welcome" id="welcome"><h1>Hello, I\\'m <span>Nova.</span></h1><p>Your intelligent AI assistant. What would you like to explore today?</p></div>';}
-function showApp(user){
- currentUser=user;
- document.getElementById("authScreen").classList.add("hidden");
- document.getElementById("accountEmail").textContent=user.email||"Signed in";
- loadChats();
-}
-async function loadChats(){
- const {data,error}=await supabaseClient.from("chats").select("id,title,created_at,updated_at").eq("user_id",currentUser.id).order("updated_at",{ascending:false});
- if(error){alert("Could not load chats: "+error.message);return;}
- chats=data||[];renderHistory();
-}
-function renderHistory(){
- const box=document.getElementById("history");box.innerHTML="";
- chats.forEach(chat=>{
-  const item=document.createElement("div");item.className="history-item"+(currentChat?.id===chat.id?" active":"");
-  item.textContent=chat.title;item.title=chat.title;item.onclick=()=>openChat(chat.id);box.appendChild(item);
- });
-}
-function newChat(){
- currentChat=null;document.getElementById("messages").innerHTML=welcomeHTML();renderHistory();
- document.getElementById("prompt").focus();
-}
-async function openChat(id){
- const chat=chats.find(c=>c.id===id);if(!chat)return;
- currentChat=chat;renderHistory();
- const {data,error}=await supabaseClient.from("messages").select("id,role,content,created_at").eq("chat_id",id).order("created_at",{ascending:true});
- if(error){alert("Could not load messages: "+error.message);return;}
- const box=document.getElementById("messages");box.innerHTML="";
- if(!data.length){box.innerHTML=welcomeHTML();return;}
- data.forEach(m=>addBubble(m.content,m.role));
-}
-function addBubble(text,role){
- const box=document.getElementById("messages");const welcome=document.getElementById("welcome");if(welcome)welcome.remove();
- const row=document.createElement("div");row.className="message "+role;
- const bubble=document.createElement("div");bubble.className="bubble";bubble.textContent=text;
- row.appendChild(bubble);box.appendChild(row);box.scrollTop=box.scrollHeight;return row;
-}
-function handleKey(e){if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMessage();}}
-async function saveMessage(chatId,role,content){
- const {error}=await supabaseClient.from("messages").insert({chat_id:chatId,user_id:currentUser.id,role,content});
- if(error)throw error;
-}
-async function sendMessage(){
- const input=document.getElementById("prompt");const message=input.value.trim();
- if(!message||busy||!currentUser)return;
- input.value="";busy=true;document.getElementById("status").textContent="● Thinking...";
- addBubble(message,"user");
- try{
-  if(!currentChat){
-   const {data,error}=await supabaseClient.from("chats").insert({user_id:currentUser.id,title:message.slice(0,35)}).select().single();
-   if(error)throw error;currentChat=data;chats.unshift(data);renderHistory();
-  }else{
-   await supabaseClient.from("chats").update({updated_at:new Date().toISOString()}).eq("id",currentChat.id).eq("user_id",currentUser.id);
-  }
-  await saveMessage(currentChat.id,"user",message);
-  const loading=addBubble("Nova is thinking...","assistant");
-  const response=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message})});
-  const data=await response.json();
-  if(!response.ok)throw new Error(data.error||"AI request failed");
-  loading.querySelector(".bubble").textContent=data.reply;
-  await saveMessage(currentChat.id,"assistant",data.reply);
-  await loadChats();
- }catch(error){
-  addBubble("Error: "+error.message,"assistant");
- }finally{
-  busy=false;document.getElementById("status").textContent="● Ready";
+ } catch (error) {
+  console.error("Authentication error:", error);
+  setNote(error.message || "Authentication failed.");
+ } finally {
+  button.disabled = false;
+  button.textContent = authMode === "login" ? "Log in" : "Create account";
  }
 }
-function toggleTheme(){document.body.classList.toggle("light");localStorage.setItem("nova_theme",document.body.classList.contains("light")?"light":"dark");}
-function voiceInput(){
- const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
- if(!SpeechRecognition){alert("Voice input is not supported in this browser.");return;}
- const recognition=new SpeechRecognition();recognition.lang="en-US";
- recognition.onresult=e=>{document.getElementById("prompt").value=e.results[0][0].transcript;};recognition.start();
+
+/* AUTH STATE */
+function showApp(user) {
+ currentUser = user;
+ el("authScreen").classList.add("hidden");
+ el("accountEmail").textContent = user.email || "Signed in";
+ loadChats();
 }
-async function init(){
- if(localStorage.getItem("nova_theme")==="light")document.body.classList.add("light");
- const {data:{session}}=await supabaseClient.auth.getSession();
- if(session?.user)showApp(session.user);
- supabaseClient.auth.onAuthStateChange((event,session)=>{
-  if(session?.user){showApp(session.user);}
-  else if(event==="SIGNED_OUT"){currentUser=null;chats=[];currentChat=null;document.getElementById("authScreen").classList.remove("hidden");}
+
+async function logout() {
+ if (!supabaseClient) return;
+ const { error } = await supabaseClient.auth.signOut();
+ if (error) {
+  alert(error.message);
+  return;
+ }
+
+ currentUser = null;
+ chats = [];
+ currentChat = null;
+ el("history").innerHTML = "";
+ el("messages").innerHTML = welcomeHTML();
+ el("authScreen").classList.remove("hidden");
+ setNote("");
+}
+
+async function init() {
+ if (localStorage.getItem("nova_theme") === "light") {
+  document.body.classList.add("light");
+ }
+
+ if (!window.supabase || !window.supabase.createClient) {
+  setNote("Supabase library could not load. Check your internet connection and refresh.");
+  return;
+ }
+
+ try {
+  supabaseClient = window.supabase.createClient(
+   SUPABASE_URL,
+   SUPABASE_PUBLISHABLE_KEY
+  );
+
+  const { data, error } = await supabaseClient.auth.getSession();
+  if (error) throw error;
+
+  if (data.session && data.session.user) {
+   showApp(data.session.user);
+  }
+
+  if (!authListenerStarted) {
+   authListenerStarted = true;
+
+   supabaseClient.auth.onAuthStateChange((event, session) => {
+    if (session && session.user) {
+     showApp(session.user);
+    } else if (event === "SIGNED_OUT") {
+     currentUser = null;
+     chats = [];
+     currentChat = null;
+     el("authScreen").classList.remove("hidden");
+    }
+   });
+  }
+ } catch (error) {
+  console.error("Supabase initialization error:", error);
+  setNote("Connection error: " + error.message);
+ }
+}
+
+/* CHAT HISTORY */
+async function loadChats() {
+ if (!currentUser) return;
+
+ const { data, error } = await supabaseClient
+  .from("chats")
+  .select("id,title,created_at,updated_at")
+  .eq("user_id", currentUser.id)
+  .order("updated_at", { ascending: false });
+
+ if (error) {
+  console.error(error);
+  alert("Could not load chats: " + error.message);
+  return;
+ }
+
+ chats = data || [];
+ renderHistory();
+}
+
+function renderHistory() {
+ const box = el("history");
+ box.innerHTML = "";
+
+ chats.forEach(chat => {
+  const item = document.createElement("div");
+  item.className = "history-item" +
+   (currentChat && currentChat.id === chat.id ? " active" : "");
+  item.textContent = chat.title;
+  item.title = chat.title;
+  item.onclick = () => openChat(chat.id);
+  box.appendChild(item);
  });
 }
-init();
+
+function newChat() {
+ currentChat = null;
+ el("messages").innerHTML = welcomeHTML();
+ renderHistory();
+ el("prompt").focus();
+}
+
+async function openChat(id) {
+ const chat = chats.find(item => item.id === id);
+ if (!chat) return;
+
+ currentChat = chat;
+ renderHistory();
+
+ const { data, error } = await supabaseClient
+  .from("messages")
+  .select("id,role,content,created_at")
+  .eq("chat_id", id)
+  .order("created_at", { ascending: true });
+
+ if (error) {
+  alert("Could not load messages: " + error.message);
+  return;
+ }
+
+ const box = el("messages");
+ box.innerHTML = "";
+
+ if (!data || data.length === 0) {
+  box.innerHTML = welcomeHTML();
+  return;
+ }
+
+ data.forEach(message => addBubble(message.content, message.role));
+}
+
+/* MESSAGE DISPLAY */
+function addBubble(text, role) {
+ const box = el("messages");
+ const welcome = el("welcome");
+ if (welcome) welcome.remove();
+
+ const row = document.createElement("div");
+ row.className = "message " + role;
+
+ const bubble = document.createElement("div");
+ bubble.className = "bubble";
+ bubble.textContent = text;
+
+ row.appendChild(bubble);
+ box.appendChild(row);
+ box.scrollTop = box.scrollHeight;
+
+ return row;
+}
+
+function handleKey(event) {
+ if (event.key === "Enter" && !event.shiftKey) {
+  event.preventDefault();
+  sendMessage();
+ }
+}
+
+async function saveMessage(chatId, role, content) {
+ const { error } = await supabaseClient
+  .from("messages")
+  .insert({
+   chat_id: chatId,
+   user_id: currentUser.id,
+   role: role,
+   content: content
+  });
+
+ if (error) throw error;
+}
+
+/* SEND MESSAGE TO GEMINI BACKEND */
+async function sendMessage() {
+ const input = el("prompt");
+ const message = input.value.trim();
+
+ if (!message || busy || !currentUser) return;
+
+ input.value = "";
+ busy = true;
+ setStatus("Thinking...");
+
+ addBubble(message, "user");
+
+ try {
+  if (!currentChat) {
+   const { data, error } = await supabaseClient
+    .from("chats")
+    .insert({
+     user_id: currentUser.id,
+     title: message.slice(0, 35)
+    })
+    .select()
+    .single();
+
+   if (error) throw error;
+
+   currentChat = data;
+   chats.unshift(data);
+   renderHistory();
+  } else {
+   const { error } = await supabaseClient
+    .from("chats")
+    .update({ updated_at: new Date().toISOString() })
+    .eq("id", currentChat.id)
+    .eq("user_id", currentUser.id);
+
+   if (error) throw error;
+  }
+
+  await saveMessage(currentChat.id, "user", message);
+
+  const loading = addBubble("Nova is thinking...", "assistant");
+
+  const response = await fetch("/api/chat", {
+   method: "POST",
+   headers: { "Content-Type": "application/json" },
+   body: JSON.stringify({ message: message })
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+   throw new Error(data.error || "AI request failed.");
+  }
+
+  const reply = data.reply || "No answer generated.";
+
+  loading.querySelector(".bubble").textContent = reply;
+  await saveMessage(currentChat.id, "assistant", reply);
+
+  await loadChats();
+
+ } catch (error) {
+  console.error("Chat error:", error);
+  addBubble("Error: " + error.message, "assistant");
+ } finally {
+  busy = false;
+  setStatus("Ready");
+ }
+}
+
+/* THEME */
+function toggleTheme() {
+ document.body.classList.toggle("light");
+
+ localStorage.setItem(
+  "nova_theme",
+  document.body.classList.contains("light") ? "light" : "dark"
+ );
+}
+
+/* VOICE INPUT */
+function voiceInput() {
+ const SpeechRecognition =
+  window.SpeechRecognition || window.webkitSpeechRecognition;
+
+ if (!SpeechRecognition) {
+  alert("Voice input is not supported in this browser.");
+  return;
+ }
+
+ const recognition = new SpeechRecognition();
+ recognition.lang = "en-US";
+
+ recognition.onresult = event => {
+  el("prompt").value = event.results[0][0].transcript;
+ };
+
+ recognition.onerror = event => {
+  alert("Voice input error: " + event.error);
+ };
+
+ recognition.start();
+}
+
+/* START APPLICATION */
+document.addEventListener("DOMContentLoaded", init);
 </script>
 </body>
 </html>
