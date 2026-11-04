@@ -1,5 +1,29 @@
-// QuBix AI - Netlify Backend Function
-// Provider fallback: Gemini -> Groq -> OpenRouter -> Kimi
+
+// ==========================================
+// QuBix AI - Complete Netlify Backend
+// AI Fallback: Gemini -> Groq -> OpenRouter -> Kimi
+// ==========================================
+
+const SYSTEM_PROMPT = `
+You are QuBix AI, the official AI assistant of QuBix AI.
+
+IDENTITY RULES:
+- Your name is always QuBix AI.
+- If someone asks your name, answer: "I am QuBix AI."
+- Never introduce yourself as Dots, Gemini, Groq, Kimi, OpenRouter,
+  or any other AI provider or model.
+- Do not start conversations by saying you are developed by another company.
+- Do not invent a different identity.
+- If asked which AI provider or model powers you, answer honestly
+  that QuBix AI uses AI technology from its configured providers.
+
+BEHAVIOR:
+- Be helpful, friendly, intelligent and accurate.
+- Respond in the same language as the user.
+- Follow the user's requested tone and format.
+- If you do not know something, say so honestly.
+- Never invent facts.
+`;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -15,6 +39,10 @@ const jsonResponse = (statusCode, data) => ({
   },
   body: JSON.stringify(data)
 });
+
+// ==========================================
+// SUPABASE AUTHENTICATION
+// ==========================================
 
 async function verifyUser(token) {
   const supabaseUrl = process.env.SUPABASE_URL;
@@ -38,24 +66,44 @@ async function verifyUser(token) {
   if (!response.ok) return false;
 
   const user = await response.json();
+
   return Boolean(user && user.id);
 }
 
+// ==========================================
+// GEMINI
+// ==========================================
+
 async function askGemini(message) {
   const key = process.env.GEMINI_API_KEY;
-  if (!key) throw new Error("Gemini key missing");
 
-  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  if (!key) {
+    throw new Error("Gemini API key missing.");
+  }
+
+  const model =
+    process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json"
+      },
       body: JSON.stringify({
-        contents: [{
-          parts: [{ text: message }]
-        }]
+        systemInstruction: {
+          parts: [{ text: SYSTEM_PROMPT }]
+        },
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: message }]
+          }
+        ],
+        generationConfig: {
+          temperature: 0.7
+        }
       })
     }
   );
@@ -63,17 +111,25 @@ async function askGemini(message) {
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.error?.message || "Gemini request failed");
+    throw new Error(
+      data.error?.message || "Gemini request failed."
+    );
   }
 
   const reply = data.candidates?.[0]?.content?.parts
     ?.map(part => part.text || "")
     .join("");
 
-  if (!reply) throw new Error("Gemini returned an empty response");
+  if (!reply) {
+    throw new Error("Gemini returned an empty response.");
+  }
 
   return reply;
 }
+
+// ==========================================
+// OPENAI-COMPATIBLE PROVIDERS
+// ==========================================
 
 async function askOpenAICompatible({
   apiKey,
@@ -82,7 +138,9 @@ async function askOpenAICompatible({
   message,
   extraHeaders = {}
 }) {
-  if (!apiKey) throw new Error("API key missing");
+  if (!apiKey) {
+    throw new Error("API key missing.");
+  }
 
   const response = await fetch(url, {
     method: "POST",
@@ -94,6 +152,10 @@ async function askOpenAICompatible({
     body: JSON.stringify({
       model,
       messages: [
+        {
+          role: "system",
+          content: SYSTEM_PROMPT
+        },
         {
           role: "user",
           content: message
@@ -107,31 +169,46 @@ async function askOpenAICompatible({
 
   if (!response.ok) {
     throw new Error(
-      data.error?.message || `Provider request failed: ${response.status}`
+      data.error?.message ||
+      `Provider request failed: ${response.status}`
     );
   }
 
   const reply = data.choices?.[0]?.message?.content;
 
-  if (!reply) throw new Error("Provider returned an empty response");
+  if (typeof reply !== "string" || !reply.trim()) {
+    throw new Error("Provider returned an empty response.");
+  }
 
   return reply;
 }
+
+// ==========================================
+// GROQ
+// ==========================================
 
 async function askGroq(message) {
   return askOpenAICompatible({
     apiKey: process.env.GROQ_API_KEY,
     url: "https://api.groq.com/openai/v1/chat/completions",
-    model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
+    model:
+      process.env.GROQ_MODEL ||
+      "llama-3.3-70b-versatile",
     message
   });
 }
+
+// ==========================================
+// OPENROUTER
+// ==========================================
 
 async function askOpenRouter(message) {
   return askOpenAICompatible({
     apiKey: process.env.OPENROUTER_API_KEY,
     url: "https://openrouter.ai/api/v1/chat/completions",
-    model: process.env.OPENROUTER_MODEL || "openrouter/free",
+    model:
+      process.env.OPENROUTER_MODEL ||
+      "openrouter/free",
     message,
     extraHeaders: {
       "HTTP-Referer": "https://qubixai.netlify.app/",
@@ -140,16 +217,28 @@ async function askOpenRouter(message) {
   });
 }
 
+// ==========================================
+// KIMI
+// ==========================================
+
 async function askKimi(message) {
   return askOpenAICompatible({
     apiKey: process.env.KIMI_API_KEY,
     url: "https://api.moonshot.ai/v1/chat/completions",
-    model: process.env.KIMI_MODEL || "kimi-k2.5",
+    model:
+      process.env.KIMI_MODEL ||
+      "kimi-k2.5",
     message
   });
 }
 
+// ==========================================
+// MAIN NETLIFY FUNCTION
+// ==========================================
+
 exports.handler = async (event) => {
+
+  // CORS preflight
   if (event.httpMethod === "OPTIONS") {
     return {
       statusCode: 204,
@@ -158,13 +247,16 @@ exports.handler = async (event) => {
     };
   }
 
+  // Only POST requests
   if (event.httpMethod !== "POST") {
     return jsonResponse(405, {
-      error: "Method not allowed"
+      error: "Method not allowed."
     });
   }
 
   try {
+
+    // Authentication
     const authHeader =
       event.headers.authorization ||
       event.headers.Authorization ||
@@ -192,6 +284,7 @@ exports.handler = async (event) => {
       });
     }
 
+    // Validate message
     const body = JSON.parse(event.body || "{}");
     const message = body.message;
 
@@ -205,6 +298,7 @@ exports.handler = async (event) => {
       });
     }
 
+    // AI provider fallback sequence
     const providers = [
       ["Gemini", () => askGemini(message)],
       ["Groq", () => askGroq(message)],
@@ -216,26 +310,41 @@ exports.handler = async (event) => {
 
     for (const [provider, request] of providers) {
       try {
+
         const reply = await request();
 
         return jsonResponse(200, {
           reply,
           provider
         });
+
       } catch (error) {
-        console.error(`${provider} failed:`, error.message);
+
+        console.error(
+          `${provider} failed:`,
+          error.message
+        );
+
         errors.push(`${provider}: ${error.message}`);
       }
     }
 
-    console.error("All AI providers failed:", errors);
+    // All providers failed
+    console.error(
+      "All AI providers failed:",
+      errors
+    );
 
     return jsonResponse(503, {
       error: "All AI providers are temporarily unavailable. Please try again."
     });
 
   } catch (error) {
-    console.error("QuBix backend error:", error);
+
+    console.error(
+      "QuBix backend error:",
+      error
+    );
 
     return jsonResponse(500, {
       error: "Server error. Please try again later."
