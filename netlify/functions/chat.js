@@ -1,248 +1,68 @@
+
 const SYSTEM_PROMPT = `
-You are QuBix AI, a highly capable, intelligent and professional AI assistant.
-
-Your capabilities:
-- Answer questions accurately and clearly.
-- Help with advanced coding, debugging and programming.
-- Explain complex topics step by step.
-- Solve mathematical and logical problems.
-- Help with writing, research, brainstorming and analysis.
-- Understand conversation history and maintain context.
-- Respond naturally in English, Urdu or Roman Urdu.
-- Never invent facts. Admit uncertainty when necessary.
-
-Be helpful, thoughtful, accurate and concise.
+You are QuBix AI, a helpful and intelligent AI assistant.
+Answer clearly and naturally in English, Urdu, or Roman Urdu,
+depending on the user's language.
+Be accurate, friendly, and useful.
 `;
 
-const TIMEOUT = 8000;
-const MAX_HISTORY = 10;
-const MAX_OUTPUT_TOKENS = 1200;
+const GEMINI_MODEL =
+  process.env.GEMINI_MODEL || "gemini-3.8-flash";
 
-const send = (statusCode, data) => ({
-  statusCode,
-  headers: {
-    "Content-Type": "application/json",
-    "Cache-Control": "no-store",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    "Access-Control-Allow-Methods": "POST, OPTIONS"
-  },
-  body: JSON.stringify(data)
-});
+const GROQ_MODEL =
+  process.env.GROQ_MODEL || "llama-3.1-8b-instant";
 
-async function fetchWithTimeout(url, options, timeout = TIMEOUT) {
+const MAX_HISTORY = 30;
+const MAX_MESSAGE_LENGTH = 12000;
+const TIMEOUT_MS = 20000;
+
+function json(statusCode, body) {
+  return {
+    statusCode,
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+    },
+    body: JSON.stringify(body),
+  };
+}
+
+async function fetchWithTimeout(url, options, timeout = TIMEOUT_MS) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
 
   try {
     return await fetch(url, {
       ...options,
-      signal: controller.signal
+      signal: controller.signal,
     });
   } finally {
     clearTimeout(timer);
   }
 }
 
-async function readResponse(response) {
-  const text = await response.text();
-
-  let data;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    throw new Error("Invalid response from AI server.");
-  }
-
-  if (!response.ok) {
-    const message =
-      data?.error?.message ||
-      data?.message ||
-      `HTTP ${response.status}`;
-
-    throw new Error(message);
-  }
-
-  return data;
-}
-
-function getHistory(history) {
+function cleanHistory(history) {
   if (!Array.isArray(history)) return [];
 
   return history
-    .filter(item =>
-      item &&
-      ["user", "assistant"].includes(item.role) &&
-      typeof item.content === "string"
-    )
     .slice(-MAX_HISTORY)
-    .map(item => ({
+    .filter(
+      (item) =>
+        item &&
+        ["user", "assistant"].includes(item.role) &&
+        typeof item.content === "string"
+    )
+    .map((item) => ({
       role: item.role,
-      content: item.content.slice(0, 3000)
+      content: item.content.slice(0, MAX_MESSAGE_LENGTH),
     }));
 }
 
-// GROQ
-async function askGroq(message, history) {
-  const key = process.env.GROQ_API_KEY;
-  if (!key) throw new Error("GROQ_API_KEY is missing.");
-
-  const messages = [
-    { role: "system", content: SYSTEM_PROMPT },
-    ...history,
-    { role: "user", content: message }
-  ];
-
-  const response = await fetchWithTimeout(
-    "https://api.groq.com/openai/v1/chat/completions",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${key}`
-      },
-      body: JSON.stringify({
-        model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
-        messages,
-        temperature: 0.7,
-        max_tokens: MAX_OUTPUT_TOKENS
-      })
-    }
-  );
-
-  const data = await readResponse(response);
-  const reply = data.choices?.[0]?.message?.content;
-
-  if (!reply) throw new Error("Groq returned an empty response.");
-  return reply;
-}
-
-// GEMINI
-async function askGemini(message, history) {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) throw new Error("GEMINI_API_KEY is missing.");
-
-  const contents = [
-    ...history.map(item => ({
-      role: item.role === "assistant" ? "model" : "user",
-      parts: [{ text: item.content }]
-    })),
-    {
-      role: "user",
-      parts: [{ text: message }]
-    }
-  ];
-
-  const response = await fetchWithTimeout(
-    `https://generativelanguage.googleapis.com/v1beta/models/${process.env.GEMINI_MODEL || "gemini-2.5-flash"}:generateContent`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": key
-      },
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [{ text: SYSTEM_PROMPT }]
-        },
-        contents,
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: MAX_OUTPUT_TOKENS
-        }
-      })
-    }
-  );
-
-  const data = await readResponse(response);
-  const reply = data.candidates?.[0]?.content?.parts
-    ?.map(part => part.text || "")
-    .join("")
-    .trim();
-
-  if (!reply) {
-    throw new Error(
-      data.promptFeedback?.blockReason || "Gemini returned an empty response."
-    );
-  }
-
-  return reply;
-}
-
-// KIMI / MOONSHOT
-async function askKimi(message, history) {
-  const key = process.env.KIMI_API_KEY;
-  if (!key) throw new Error("KIMI_API_KEY is missing.");
-
-  const response = await fetchWithTimeout(
-    "https://api.moonshot.ai/v1/chat/completions",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${key}`
-      },
-      body: JSON.stringify({
-        model: process.env.KIMI_MODEL || "kimi-k2.5",
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          ...history,
-          { role: "user", content: message }
-        ],
-        temperature: 0.7,
-        max_tokens: MAX_OUTPUT_TOKENS
-      })
-    }
-  );
-
-  const data = await readResponse(response);
-  const reply = data.choices?.[0]?.message?.content;
-
-  if (!reply) throw new Error("Kimi returned an empty response.");
-  return reply;
-}
-
-// OPENROUTER
-async function askOpenRouter(message, history) {
-  const key = process.env.OPENROUTER_API_KEY;
-  if (!key) throw new Error("OPENROUTER_API_KEY is missing.");
-
-  const response = await fetchWithTimeout(
-    "https://openrouter.ai/api/v1/chat/completions",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${key}`,
-        "HTTP-Referer": process.env.SITE_URL || "https://qubix.netlify.app",
-        "X-Title": "QuBix AI"
-      },
-      body: JSON.stringify({
-        model: process.env.OPENROUTER_MODEL || "openrouter/free",
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          ...history,
-          { role: "user", content: message }
-        ],
-        temperature: 0.7,
-        max_tokens: MAX_OUTPUT_TOKENS
-      })
-    }
-  );
-
-  const data = await readResponse(response);
-  const reply = data.choices?.[0]?.message?.content;
-
-  if (!reply) throw new Error("OpenRouter returned an empty response.");
-  return reply;
-}
-
-// VERIFY USER
 async function verifyUser(token) {
   const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_ANON_KEY;
+  const anonKey = process.env.SUPABASE_ANON_KEY;
 
-  if (!url || !key) {
+  if (!url || !anonKey) {
     throw new Error("Supabase environment variables are missing.");
   }
 
@@ -251,137 +71,221 @@ async function verifyUser(token) {
     {
       method: "GET",
       headers: {
-        apikey: key,
-        Authorization: `Bearer ${token}`
-      }
+        apikey: anonKey,
+        Authorization: `Bearer ${token}`,
+      },
     },
-    8000
+    10000
   );
 
   if (!response.ok) {
-    throw new Error("Authentication failed. Please sign in again.");
+    throw new Error("Supabase authentication failed.");
   }
 
-  const user = await response.json();
-  if (!user?.id) {
-    throw new Error("Invalid user session.");
-  }
-
-  return user;
+  return response.json();
 }
 
-// MAIN HANDLER
-exports.handler = async event => {
-  if (event.httpMethod === "OPTIONS") {
-    return send(200, { success: true });
+async function askGemini(messages) {
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (!apiKey) throw new Error("GEMINI_API_KEY is missing.");
+
+  const contents = messages.map((message) => ({
+    role: message.role === "assistant" ? "model" : "user",
+    parts: [{ text: message.content }],
+  }));
+
+  const response = await fetchWithTimeout(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      body: JSON.stringify({
+        systemInstruction: {
+          parts: [{ text: SYSTEM_PROMPT }],
+        },
+        contents,
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 2048,
+        },
+      }),
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data.error?.message || `Gemini HTTP ${response.status}`
+    );
   }
 
+  const answer = data.candidates?.[0]?.content?.parts
+    ?.map((part) => part.text || "")
+    .join("")
+    .trim();
+
+  if (!answer) throw new Error("Gemini returned an empty response.");
+
+  return answer;
+}
+
+async function askGroq(messages) {
+  const apiKey = process.env.GROQ_API_KEY;
+
+  if (!apiKey) throw new Error("GROQ_API_KEY is missing.");
+
+  const groqMessages = [
+    { role: "system", content: SYSTEM_PROMPT },
+    ...messages,
+  ];
+
+  const response = await fetchWithTimeout(
+    "https://api.groq.com/openai/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        messages: groqMessages,
+        temperature: 0.7,
+        max_completion_tokens: 2048,
+      }),
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data.error?.message || `Groq HTTP ${response.status}`
+    );
+  }
+
+  const answer = data.choices?.[0]?.message?.content?.trim();
+
+  if (!answer) throw new Error("Groq returned an empty response.");
+
+  return answer;
+}
+
+exports.handler = async (event) => {
   if (event.httpMethod !== "POST") {
-    return send(405, {
-      success: false,
-      error: "Method not allowed."
-    });
+    return json(405, { error: "Method not allowed." });
   }
 
   try {
+    const body = JSON.parse(event.body || "{}");
+    const message =
+      typeof body.message === "string" ? body.message.trim() : "";
+
+    if (!message) {
+      return json(400, { error: "Message is required." });
+    }
+
+    if (message.length > MAX_MESSAGE_LENGTH) {
+      return json(400, { error: "Message is too long." });
+    }
+
     const authHeader =
-      event.headers?.authorization ||
-      event.headers?.Authorization ||
+      event.headers.authorization ||
+      event.headers.Authorization ||
       "";
 
     const token = authHeader.replace(/^Bearer\s+/i, "").trim();
 
     if (!token) {
-      return send(401, {
-        success: false,
-        error: "Please sign in to use QuBix AI."
-      });
+      return json(401, { error: "Please sign in again." });
     }
 
     await verifyUser(token);
 
-    let body;
-    try {
-      body = JSON.parse(event.body || "{}");
-    } catch {
-      return send(400, {
-        success: false,
-        error: "Invalid request body."
-      });
-    }
+    const history = cleanHistory(body.history);
 
-    const message =
-      typeof body.message === "string"
-        ? body.message.trim()
-        : "";
-
-    if (!message) {
-      return send(400, {
-        success: false,
-        error: "Message is required."
-      });
-    }
-
-    if (message.length > 12000) {
-      return send(400, {
-        success: false,
-        error: "Message is too long. Please shorten it."
-      });
-    }
-
-    const history = getHistory(body.history);
-
-    const providers = [
-      ["Groq", askGroq],
-      ["Gemini", askGemini],
-      ["Kimi", askKimi],
-      ["OpenRouter", askOpenRouter]
+    const messages = [
+      ...history,
+      { role: "user", content: message },
     ];
 
     const errors = [];
 
-    for (const [name, provider] of providers) {
+    // First provider: Gemini
+    if (process.env.GEMINI_API_KEY) {
       try {
-        console.log(`Trying AI provider: ${name}`);
+        console.log("Trying AI provider: Gemini");
 
-        const reply = await provider(message, history);
+        const reply = await askGemini(messages);
 
-        console.log(`AI provider succeeded: ${name}`);
+        console.log("Gemini response successful.");
 
-        return send(200, {
-          success: true,
+        return json(200, {
           reply,
-          provider: name
+          provider: "Gemini",
         });
-
       } catch (error) {
-        const reason = error.name === "AbortError"
-          ? "Request timed out."
-          : error.message || "Unknown provider error.";
-
-        console.error(`${name} failed: ${reason}`);
-
+        console.error("Gemini failed:", error.message);
         errors.push({
-          provider: name,
-          error: reason
+          provider: "Gemini",
+          error: error.message,
         });
       }
+    } else {
+      errors.push({
+        provider: "Gemini",
+        error: "GEMINI_API_KEY is missing.",
+      });
+    }
+
+    // Second provider: Groq
+    if (process.env.GROQ_API_KEY) {
+      try {
+        console.log("Trying AI provider: Groq");
+
+        const reply = await askGroq(messages);
+
+        console.log("Groq response successful.");
+
+        return json(200, {
+          reply,
+          provider: "Groq",
+        });
+      } catch (error) {
+        console.error("Groq failed:", error.message);
+        errors.push({
+          provider: "Groq",
+          error: error.message,
+        });
+      }
+    } else {
+      errors.push({
+        provider: "Groq",
+        error: "GROQ_API_KEY is missing.",
+      });
     }
 
     console.error("All AI providers failed:", errors);
 
-    return send(503, {
-      success: false,
+    return json(503, {
       error: "All AI providers are currently unavailable.",
-      details: errors
+      details: errors,
     });
-
   } catch (error) {
-    console.error("QuBix function error:", error);
+    console.error("Chat function error:", error.message);
 
-    return send(500, {
-      success: false,
-      error: error.message || "Internal server error."
-    });
+    const message = error.message.includes("Supabase")
+      ? error.message
+      : "Internal server error.";
+
+    return json(
+      message.includes("authentication") ? 401 : 500,
+      { error: message }
+    );
   }
 };
