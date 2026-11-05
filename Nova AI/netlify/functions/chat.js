@@ -2,9 +2,15 @@
 
 const SYSTEM_PROMPT =
   "You are QuBix AI, a helpful and professional AI assistant. " +
-  "Answer clearly in English, Urdu, or Roman Urdu. Be accurate and helpful. " +
-  "Use the conversation history to understand follow-up questions and remember details " +
-  "the user has shared in this chat. Do not claim to remember information not present in the history.";
+  "Answer clearly in English, Urdu, or Roman Urdu. " +
+  "Be accurate, friendly, concise, and helpful. " +
+  "Use conversation history to understand follow-up questions. " +
+  "Remember details shared in this chat using the provided history. " +
+  "Never claim to remember information that is not present in the history.";
+
+const PROVIDER_TIMEOUT = 10000;
+const MAX_HISTORY = 12;
+const MAX_OUTPUT_TOKENS = 1024;
 
 exports.handler = async (event) => {
 
@@ -18,10 +24,16 @@ exports.handler = async (event) => {
   });
 
   if (event.httpMethod !== "POST") {
-    return send(405, { error: "Method not allowed." });
+    return send(405, {
+      error: "Method not allowed."
+    });
   }
 
   try {
+
+    // =================================
+    // SUPABASE AUTHENTICATION
+    // =================================
 
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_ANON_KEY;
@@ -34,7 +46,6 @@ exports.handler = async (event) => {
       });
     }
 
-    // Verify logged-in user.
     const authHeader =
       event.headers?.authorization ||
       event.headers?.Authorization ||
@@ -50,6 +61,13 @@ exports.handler = async (event) => {
       });
     }
 
+    const authController = new AbortController();
+
+    const authTimer = setTimeout(
+      () => authController.abort(),
+      8000
+    );
+
     let authResponse;
 
     try {
@@ -61,17 +79,21 @@ exports.handler = async (event) => {
           headers: {
             apikey: supabaseKey,
             Authorization: `Bearer ${accessToken}`
-          }
+          },
+          signal: authController.signal
         }
       );
 
     } catch (error) {
 
-      console.error("Supabase authentication service unavailable.");
+      console.error("Supabase authentication error:", error.message);
 
       return send(503, {
-        error: "Authentication service is temporarily unavailable."
+        error: "Authentication service is unavailable. Please try again."
       });
+
+    } finally {
+      clearTimeout(authTimer);
     }
 
     if (!authResponse.ok) {
@@ -80,7 +102,10 @@ exports.handler = async (event) => {
       });
     }
 
-    // Read request.
+    // =================================
+    // READ REQUEST
+    // =================================
+
     let body;
 
     try {
@@ -107,7 +132,10 @@ exports.handler = async (event) => {
 
     const userMessage = message.trim();
 
-    // Keep recent conversation history.
+    // =================================
+    // CONVERSATION MEMORY
+    // =================================
+
     const rawHistory = Array.isArray(body.history)
       ? body.history
       : [];
@@ -115,7 +143,7 @@ exports.handler = async (event) => {
     const history = [];
     let totalChars = 0;
 
-    for (const item of rawHistory.slice(-30)) {
+    for (const item of rawHistory.slice(-MAX_HISTORY)) {
 
       if (
         !item ||
@@ -126,9 +154,9 @@ exports.handler = async (event) => {
         continue;
       }
 
-      const content = item.content.trim().slice(0, 6000);
+      const content = item.content.trim().slice(0, 4000);
 
-      if (totalChars + content.length > 24000) {
+      if (totalChars + content.length > 16000) {
         break;
       }
 
@@ -140,7 +168,7 @@ exports.handler = async (event) => {
       totalChars += content.length;
     }
 
-    // Make sure the latest message is included.
+    // Ensure latest user message is included.
     const last = history[history.length - 1];
 
     if (
@@ -154,13 +182,6 @@ exports.handler = async (event) => {
       });
     }
 
-    // Gemini uses "model" for assistant messages.
-    const geminiContents = history.map(item => ({
-      role: item.role === "assistant" ? "model" : "user",
-      parts: [{ text: item.content }]
-    }));
-
-    // OpenAI-compatible providers.
     const compatibleMessages = [
       {
         role: "system",
@@ -169,111 +190,114 @@ exports.handler = async (event) => {
       ...history
     ];
 
+    const geminiContents = history.map(item => ({
+      role: item.role === "assistant" ? "model" : "user",
+      parts: [
+        {
+          text: item.content
+        }
+      ]
+    }));
+
     // =================================
-    // GEMINI
+    // PROVIDER REQUEST HELPER
     // =================================
 
-    if (process.env.GEMINI_API_KEY) {
+    async function requestProvider(name, url, headers, payload) {
+
+      const controller = new AbortController();
+
+      const timer = setTimeout(
+        () => controller.abort(),
+        PROVIDER_TIMEOUT
+      );
 
       try {
 
-        const response = await fetch(
-          "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
-          {
-            method: "POST",
-
-            headers: {
-              "Content-Type": "application/json",
-              "x-goog-api-key": process.env.GEMINI_API_KEY
-            },
-
-            body: JSON.stringify({
-              systemInstruction: {
-                parts: [{ text: SYSTEM_PROMPT }]
-              },
-
-              contents: geminiContents,
-
-              generationConfig: {
-                temperature: 0.7,
-                maxOutputTokens: 2048
-              }
-            })
-          }
-        );
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(
-            data.error?.message || "Gemini failed."
-          );
-        }
-
-        const reply = data.candidates?.[0]?.content?.parts
-          ?.map(part => part.text || "")
-          .join("")
-          .trim();
-
-        if (!reply) {
-          throw new Error("Empty Gemini response.");
-        }
-
-        return send(200, {
-          reply,
-          provider: "Gemini"
+        const response = await fetch(url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(payload),
+          signal: controller.signal
         });
 
+        let data;
+
+        try {
+          data = await response.json();
+        } catch {
+          throw new Error(`${name}: Invalid response from provider.`);
+        }
+
+        if (!response.ok) {
+
+          const apiError =
+            data.error?.message ||
+            data.error?.metadata?.raw ||
+            data.message ||
+            `HTTP ${response.status}`;
+
+          throw new Error(`${name}: ${apiError}`);
+        }
+
+        const reply =
+          data.choices?.[0]?.message?.content?.trim() ||
+          data.candidates?.[0]?.content?.parts
+            ?.map(part => part.text || "")
+            .join("")
+            .trim();
+
+        if (!reply) {
+          throw new Error(`${name}: Empty response.`);
+        }
+
+        console.log(`${name} responded successfully.`);
+
+        return reply;
+
       } catch (error) {
-        console.error("Gemini failed:", error.message);
+
+        if (error.name === "AbortError") {
+          throw new Error(`${name}: Request timed out.`);
+        }
+
+        throw error;
+
+      } finally {
+        clearTimeout(timer);
       }
     }
 
     // =================================
-    // GROQ
+    // PROVIDER 1: GROQ
+    // FAST PRIMARY PROVIDER
     // =================================
 
     if (process.env.GROQ_API_KEY) {
 
       try {
 
-        const response = await fetch(
+        const reply = await requestProvider(
+          "Groq",
+
           "https://api.groq.com/openai/v1/chat/completions",
+
           {
-            method: "POST",
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${process.env.GROQ_API_KEY}`
+          },
 
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${process.env.GROQ_API_KEY}`
-            },
+          {
+            model:
+              process.env.GROQ_MODEL ||
+              "llama-3.3-70b-versatile",
 
-            body: JSON.stringify({
-              model:
-                process.env.GROQ_MODEL ||
-                "llama-3.3-70b-versatile",
+            messages: compatibleMessages,
 
-              messages: compatibleMessages,
-
-              temperature: 0.7,
-              max_tokens: 2048
-            })
+            temperature: 0.7,
+            max_tokens: MAX_OUTPUT_TOKENS
           }
         );
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(
-            data.error?.message || "Groq failed."
-          );
-        }
-
-        const reply =
-          data.choices?.[0]?.message?.content?.trim();
-
-        if (!reply) {
-          throw new Error("Empty Groq response.");
-        }
 
         return send(200, {
           reply,
@@ -281,113 +305,84 @@ exports.handler = async (event) => {
         });
 
       } catch (error) {
-        console.error("Groq failed:", error.message);
+        console.error(error.message);
       }
     }
 
     // =================================
-    // OPENROUTER
+    // PROVIDER 2: GEMINI
     // =================================
 
-    if (process.env.OPENROUTER_API_KEY) {
+    if (process.env.GEMINI_API_KEY) {
 
       try {
 
-        const response = await fetch(
-          "https://openrouter.ai/api/v1/chat/completions",
-          {
-            method: "POST",
+        const reply = await requestProvider(
+          "Gemini",
 
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-              "HTTP-Referer": "https://qubixai.netlify.app/",
-              "X-Title": "QuBix AI"
+          "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+
+          {
+            "Content-Type": "application/json",
+            "x-goog-api-key": process.env.GEMINI_API_KEY
+          },
+
+          {
+            systemInstruction: {
+              parts: [
+                {
+                  text: SYSTEM_PROMPT
+                }
+              ]
             },
 
-            body: JSON.stringify({
-              model:
-                process.env.OPENROUTER_MODEL ||
-                "openrouter/free",
+            contents: geminiContents,
 
-              messages: compatibleMessages,
-
+            generationConfig: {
               temperature: 0.7,
-              max_tokens: 2048
-            })
+              maxOutputTokens: MAX_OUTPUT_TOKENS
+            }
           }
         );
 
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(
-            data.error?.message || "OpenRouter failed."
-          );
-        }
-
-        const reply =
-          data.choices?.[0]?.message?.content?.trim();
-
-        if (!reply) {
-          throw new Error("Empty OpenRouter response.");
-        }
-
         return send(200, {
           reply,
-          provider: "OpenRouter"
+          provider: "Gemini"
         });
 
       } catch (error) {
-        console.error("OpenRouter failed:", error.message);
+        console.error(error.message);
       }
     }
 
     // =================================
-    // KIMI
+    // PROVIDER 3: KIMI
     // =================================
 
     if (process.env.KIMI_API_KEY) {
 
       try {
 
-        const response = await fetch(
+        const reply = await requestProvider(
+          "Kimi",
+
           "https://api.moonshot.ai/v1/chat/completions",
+
           {
-            method: "POST",
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${process.env.KIMI_API_KEY}`
+          },
 
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${process.env.KIMI_API_KEY}`
-            },
+          {
+            model:
+              process.env.KIMI_MODEL ||
+              "kimi-k2.5",
 
-            body: JSON.stringify({
-              model:
-                process.env.KIMI_MODEL ||
-                "kimi-k2.5",
+            messages: compatibleMessages,
 
-              messages: compatibleMessages,
-
-              temperature: 0.7,
-              max_tokens: 2048
-            })
+            max_tokens: MAX_OUTPUT_TOKENS
           }
         );
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(
-            data.error?.message || "Kimi failed."
-          );
-        }
-
-        const reply =
-          data.choices?.[0]?.message?.content?.trim();
-
-        if (!reply) {
-          throw new Error("Empty Kimi response.");
-        }
 
         return send(200, {
           reply,
@@ -395,21 +390,68 @@ exports.handler = async (event) => {
         });
 
       } catch (error) {
-        console.error("Kimi failed:", error.message);
+        console.error(error.message);
       }
     }
 
-    // No provider worked.
+    // =================================
+    // PROVIDER 4: OPENROUTER
+    // =================================
+
+    if (process.env.OPENROUTER_API_KEY) {
+
+      try {
+
+        const reply = await requestProvider(
+          "OpenRouter",
+
+          "https://openrouter.ai/api/v1/chat/completions",
+
+          {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+            "HTTP-Referer": "https://qubixai.netlify.app/",
+            "X-Title": "QuBix AI"
+          },
+
+          {
+            model:
+              process.env.OPENROUTER_MODEL ||
+              "openrouter/free",
+
+            messages: compatibleMessages,
+
+            temperature: 0.7,
+            max_tokens: MAX_OUTPUT_TOKENS
+          }
+        );
+
+        return send(200, {
+          reply,
+          provider: "OpenRouter"
+        });
+
+      } catch (error) {
+        console.error(error.message);
+      }
+    }
+
+    // =================================
+    // ALL PROVIDERS FAILED
+    // =================================
+
+    console.error("All configured AI providers failed.");
+
     return send(503, {
-      error: "QuBix AI is temporarily unable to respond. Please try again."
+      error: "All AI providers are currently unavailable. Please try again in a moment."
     });
 
   } catch (error) {
 
-    console.error("Chat function error:", error.message);
+    console.error("QuBix server error:", error.message);
 
     return send(500, {
-      error: "An unexpected server error occurred."
+      error: "QuBix encountered a server error. Please try again."
     });
   }
 };
