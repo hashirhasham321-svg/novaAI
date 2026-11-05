@@ -10,7 +10,7 @@ const GEMINI_MODEL =
   process.env.GEMINI_MODEL || "gemini-3.8-flash";
 
 const GROQ_MODEL =
-  process.env.GROQ_MODEL || "llama-3.1-8b-instant";
+  process.env.GROQ_MODEL || "openai/gpt-oss-20b";
 
 const MAX_HISTORY = 30;
 const MAX_MESSAGE_LENGTH = 12000;
