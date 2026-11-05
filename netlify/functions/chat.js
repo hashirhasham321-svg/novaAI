@@ -1,353 +1,415 @@
+// netlify/functions/chat.js
 
-// ==========================================
-// QuBix AI - Complete Netlify Backend
-// AI Fallback: Gemini -> Groq -> OpenRouter -> Kimi
-// ==========================================
-
-const SYSTEM_PROMPT = `
-You are QuBix AI, the official AI assistant of QuBix AI.
-
-IDENTITY RULES:
-- Your name is always QuBix AI.
-- If someone asks your name, answer: "I am QuBix AI."
-- Never introduce yourself as Dots, Gemini, Groq, Kimi, OpenRouter,
-  or any other AI provider or model.
-- Do not start conversations by saying you are developed by another company.
-- Do not invent a different identity.
-- If asked which AI provider or model powers you, answer honestly
-  that QuBix AI uses AI technology from its configured providers.
-
-BEHAVIOR:
-- Be helpful, friendly, intelligent and accurate.
-- Respond in the same language as the user.
-- Follow the user's requested tone and format.
-- If you do not know something, say so honestly.
-- Never invent facts.
-`;
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
-  "Access-Control-Allow-Methods": "POST, OPTIONS"
-};
-
-const jsonResponse = (statusCode, data) => ({
-  statusCode,
-  headers: {
-    ...corsHeaders,
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify(data)
-});
-
-// ==========================================
-// SUPABASE AUTHENTICATION
-// ==========================================
-
-async function verifyUser(token) {
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const anonKey = process.env.SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !anonKey) {
-    throw new Error("Supabase environment variables are missing.");
-  }
-
-  const response = await fetch(
-    `${supabaseUrl}/auth/v1/user`,
-    {
-      method: "GET",
-      headers: {
-        "apikey": anonKey,
-        "Authorization": `Bearer ${token}`
-      }
-    }
-  );
-
-  if (!response.ok) return false;
-
-  const user = await response.json();
-
-  return Boolean(user && user.id);
-}
-
-// ==========================================
-// GEMINI
-// ==========================================
-
-async function askGemini(message) {
-  const key = process.env.GEMINI_API_KEY;
-
-  if (!key) {
-    throw new Error("Gemini API key missing.");
-  }
-
-  const model =
-    process.env.GEMINI_MODEL || "gemini-2.5-flash";
-
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [{ text: SYSTEM_PROMPT }]
-        },
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: message }]
-          }
-        ],
-        generationConfig: {
-          temperature: 0.7
-        }
-      })
-    }
-  );
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(
-      data.error?.message || "Gemini request failed."
-    );
-  }
-
-  const reply = data.candidates?.[0]?.content?.parts
-    ?.map(part => part.text || "")
-    .join("");
-
-  if (!reply) {
-    throw new Error("Gemini returned an empty response.");
-  }
-
-  return reply;
-}
-
-// ==========================================
-// OPENAI-COMPATIBLE PROVIDERS
-// ==========================================
-
-async function askOpenAICompatible({
-  apiKey,
-  url,
-  model,
-  message,
-  extraHeaders = {}
-}) {
-  if (!apiKey) {
-    throw new Error("API key missing.");
-  }
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`,
-      ...extraHeaders
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        {
-          role: "system",
-          content: SYSTEM_PROMPT
-        },
-        {
-          role: "user",
-          content: message
-        }
-      ],
-      temperature: 0.7
-    })
-  });
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(
-      data.error?.message ||
-      `Provider request failed: ${response.status}`
-    );
-  }
-
-  const reply = data.choices?.[0]?.message?.content;
-
-  if (typeof reply !== "string" || !reply.trim()) {
-    throw new Error("Provider returned an empty response.");
-  }
-
-  return reply;
-}
-
-// ==========================================
-// GROQ
-// ==========================================
-
-async function askGroq(message) {
-  return askOpenAICompatible({
-    apiKey: process.env.GROQ_API_KEY,
-    url: "https://api.groq.com/openai/v1/chat/completions",
-    model:
-      process.env.GROQ_MODEL ||
-      "llama-3.3-70b-versatile",
-    message
-  });
-}
-
-// ==========================================
-// OPENROUTER
-// ==========================================
-
-async function askOpenRouter(message) {
-  return askOpenAICompatible({
-    apiKey: process.env.OPENROUTER_API_KEY,
-    url: "https://openrouter.ai/api/v1/chat/completions",
-    model:
-      process.env.OPENROUTER_MODEL ||
-      "openrouter/free",
-    message,
-    extraHeaders: {
-      "HTTP-Referer": "https://qubixai.netlify.app/",
-      "X-Title": "QuBix AI"
-    }
-  });
-}
-
-// ==========================================
-// KIMI
-// ==========================================
-
-async function askKimi(message) {
-  return askOpenAICompatible({
-    apiKey: process.env.KIMI_API_KEY,
-    url: "https://api.moonshot.ai/v1/chat/completions",
-    model:
-      process.env.KIMI_MODEL ||
-      "kimi-k2.5",
-    message
-  });
-}
-
-// ==========================================
-// MAIN NETLIFY FUNCTION
-// ==========================================
+const SYSTEM_PROMPT =
+  "You are QuBix AI, a helpful and professional AI assistant. " +
+  "Answer clearly in English, Urdu, or Roman Urdu. Be accurate and helpful. " +
+  "Use the conversation history to understand follow-up questions and remember details " +
+  "the user has shared in this chat. Do not claim to remember information not present in the history.";
 
 exports.handler = async (event) => {
 
-  // CORS preflight
-  if (event.httpMethod === "OPTIONS") {
-    return {
-      statusCode: 204,
-      headers: corsHeaders,
-      body: ""
-    };
-  }
+  const send = (statusCode, data) => ({
+    statusCode,
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store"
+    },
+    body: JSON.stringify(data)
+  });
 
-  // Only POST requests
   if (event.httpMethod !== "POST") {
-    return jsonResponse(405, {
-      error: "Method not allowed."
-    });
+    return send(405, { error: "Method not allowed." });
   }
 
   try {
 
-    // Authentication
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      console.error("Supabase environment variables missing.");
+
+      return send(503, {
+        error: "Authentication service is not configured."
+      });
+    }
+
+    // Verify logged-in user.
     const authHeader =
-      event.headers.authorization ||
-      event.headers.Authorization ||
+      event.headers?.authorization ||
+      event.headers?.Authorization ||
       "";
 
-    if (!authHeader.startsWith("Bearer ")) {
-      return jsonResponse(401, {
+    const accessToken = authHeader.startsWith("Bearer ")
+      ? authHeader.slice(7).trim()
+      : "";
+
+    if (!accessToken) {
+      return send(401, {
         error: "Please log in to use QuBix AI."
       });
     }
 
-    const token = authHeader.slice(7).trim();
+    let authResponse;
 
-    if (!token) {
-      return jsonResponse(401, {
-        error: "Invalid login session."
+    try {
+
+      authResponse = await fetch(
+        `${supabaseUrl}/auth/v1/user`,
+        {
+          method: "GET",
+          headers: {
+            apikey: supabaseKey,
+            Authorization: `Bearer ${accessToken}`
+          }
+        }
+      );
+
+    } catch (error) {
+
+      console.error("Supabase authentication service unavailable.");
+
+      return send(503, {
+        error: "Authentication service is temporarily unavailable."
       });
     }
 
-    const authenticated = await verifyUser(token);
-
-    if (!authenticated) {
-      return jsonResponse(401, {
+    if (!authResponse.ok) {
+      return send(401, {
         error: "Your session is invalid or expired. Please log in again."
       });
     }
 
-    // Validate message
-    const body = JSON.parse(event.body || "{}");
-    const message = body.message;
+    // Read request.
+    let body;
 
-    if (
-      typeof message !== "string" ||
-      !message.trim() ||
-      message.length > 12000
-    ) {
-      return jsonResponse(400, {
-        error: "Please enter a message (maximum 12000 characters)."
+    try {
+      body = JSON.parse(event.body || "{}");
+    } catch {
+      return send(400, {
+        error: "Invalid request body."
       });
     }
 
-    // AI provider fallback sequence
-    const providers = [
-      ["Gemini", () => askGemini(message)],
-      ["Groq", () => askGroq(message)],
-      ["OpenRouter", () => askOpenRouter(message)],
-      ["Kimi", () => askKimi(message)]
+    const message = body.message;
+
+    if (typeof message !== "string" || !message.trim()) {
+      return send(400, {
+        error: "Message is required."
+      });
+    }
+
+    if (message.length > 12000) {
+      return send(400, {
+        error: "Message is too long."
+      });
+    }
+
+    const userMessage = message.trim();
+
+    // Keep recent conversation history.
+    const rawHistory = Array.isArray(body.history)
+      ? body.history
+      : [];
+
+    const history = [];
+    let totalChars = 0;
+
+    for (const item of rawHistory.slice(-30)) {
+
+      if (
+        !item ||
+        !["user", "assistant"].includes(item.role) ||
+        typeof item.content !== "string" ||
+        !item.content.trim()
+      ) {
+        continue;
+      }
+
+      const content = item.content.trim().slice(0, 6000);
+
+      if (totalChars + content.length > 24000) {
+        break;
+      }
+
+      history.push({
+        role: item.role,
+        content
+      });
+
+      totalChars += content.length;
+    }
+
+    // Make sure the latest message is included.
+    const last = history[history.length - 1];
+
+    if (
+      !last ||
+      last.role !== "user" ||
+      last.content !== userMessage
+    ) {
+      history.push({
+        role: "user",
+        content: userMessage
+      });
+    }
+
+    // Gemini uses "model" for assistant messages.
+    const geminiContents = history.map(item => ({
+      role: item.role === "assistant" ? "model" : "user",
+      parts: [{ text: item.content }]
+    }));
+
+    // OpenAI-compatible providers.
+    const compatibleMessages = [
+      {
+        role: "system",
+        content: SYSTEM_PROMPT
+      },
+      ...history
     ];
 
-    const errors = [];
+    // =================================
+    // GEMINI
+    // =================================
 
-    for (const [provider, request] of providers) {
+    if (process.env.GEMINI_API_KEY) {
+
       try {
 
-        const reply = await request();
+        const response = await fetch(
+          "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+          {
+            method: "POST",
 
-        return jsonResponse(200, {
+            headers: {
+              "Content-Type": "application/json",
+              "x-goog-api-key": process.env.GEMINI_API_KEY
+            },
+
+            body: JSON.stringify({
+              systemInstruction: {
+                parts: [{ text: SYSTEM_PROMPT }]
+              },
+
+              contents: geminiContents,
+
+              generationConfig: {
+                temperature: 0.7,
+                maxOutputTokens: 2048
+              }
+            })
+          }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data.error?.message || "Gemini failed."
+          );
+        }
+
+        const reply = data.candidates?.[0]?.content?.parts
+          ?.map(part => part.text || "")
+          .join("")
+          .trim();
+
+        if (!reply) {
+          throw new Error("Empty Gemini response.");
+        }
+
+        return send(200, {
           reply,
-          provider
+          provider: "Gemini"
         });
 
       } catch (error) {
-
-        console.error(
-          `${provider} failed:`,
-          error.message
-        );
-
-        errors.push(`${provider}: ${error.message}`);
+        console.error("Gemini failed:", error.message);
       }
     }
 
-    // All providers failed
-    console.error(
-      "All AI providers failed:",
-      errors
-    );
+    // =================================
+    // GROQ
+    // =================================
 
-    return jsonResponse(503, {
-      error: "All AI providers are temporarily unavailable. Please try again."
+    if (process.env.GROQ_API_KEY) {
+
+      try {
+
+        const response = await fetch(
+          "https://api.groq.com/openai/v1/chat/completions",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${process.env.GROQ_API_KEY}`
+            },
+
+            body: JSON.stringify({
+              model:
+                process.env.GROQ_MODEL ||
+                "llama-3.3-70b-versatile",
+
+              messages: compatibleMessages,
+
+              temperature: 0.7,
+              max_tokens: 2048
+            })
+          }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data.error?.message || "Groq failed."
+          );
+        }
+
+        const reply =
+          data.choices?.[0]?.message?.content?.trim();
+
+        if (!reply) {
+          throw new Error("Empty Groq response.");
+        }
+
+        return send(200, {
+          reply,
+          provider: "Groq"
+        });
+
+      } catch (error) {
+        console.error("Groq failed:", error.message);
+      }
+    }
+
+    // =================================
+    // OPENROUTER
+    // =================================
+
+    if (process.env.OPENROUTER_API_KEY) {
+
+      try {
+
+        const response = await fetch(
+          "https://openrouter.ai/api/v1/chat/completions",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+              "HTTP-Referer": "https://qubixai.netlify.app/",
+              "X-Title": "QuBix AI"
+            },
+
+            body: JSON.stringify({
+              model:
+                process.env.OPENROUTER_MODEL ||
+                "openrouter/free",
+
+              messages: compatibleMessages,
+
+              temperature: 0.7,
+              max_tokens: 2048
+            })
+          }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data.error?.message || "OpenRouter failed."
+          );
+        }
+
+        const reply =
+          data.choices?.[0]?.message?.content?.trim();
+
+        if (!reply) {
+          throw new Error("Empty OpenRouter response.");
+        }
+
+        return send(200, {
+          reply,
+          provider: "OpenRouter"
+        });
+
+      } catch (error) {
+        console.error("OpenRouter failed:", error.message);
+      }
+    }
+
+    // =================================
+    // KIMI
+    // =================================
+
+    if (process.env.KIMI_API_KEY) {
+
+      try {
+
+        const response = await fetch(
+          "https://api.moonshot.ai/v1/chat/completions",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${process.env.KIMI_API_KEY}`
+            },
+
+            body: JSON.stringify({
+              model:
+                process.env.KIMI_MODEL ||
+                "kimi-k2.5",
+
+              messages: compatibleMessages,
+
+              temperature: 0.7,
+              max_tokens: 2048
+            })
+          }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data.error?.message || "Kimi failed."
+          );
+        }
+
+        const reply =
+          data.choices?.[0]?.message?.content?.trim();
+
+        if (!reply) {
+          throw new Error("Empty Kimi response.");
+        }
+
+        return send(200, {
+          reply,
+          provider: "Kimi"
+        });
+
+      } catch (error) {
+        console.error("Kimi failed:", error.message);
+      }
+    }
+
+    // No provider worked.
+    return send(503, {
+      error: "QuBix AI is temporarily unable to respond. Please try again."
     });
 
   } catch (error) {
 
-    console.error(
-      "QuBix backend error:",
-      error
-    );
+    console.error("Chat function error:", error.message);
 
-    return jsonResponse(500, {
-      error: "Server error. Please try again later."
+    return send(500, {
+      error: "An unexpected server error occurred."
     });
   }
 };
