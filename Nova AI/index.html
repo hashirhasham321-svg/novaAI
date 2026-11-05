@@ -1,25 +1,28 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>QuBix AI</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop stop-color='%2300d9ff'/%3E%3Cstop offset='1' stop-color='%238b20ff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M50 8a42 42 0 1 0 30 71L96 95H72L61 83a42 42 0 0 1-11 2 35 35 0 1 1 35-35 34 34 0 0 1-9 23l12 12A50 50 0 1 0 50 8' fill='url(%23g)'/%3E%3Cpath d='M50 30l5 13 13 5-13 5-5 13-5-13-13-5 13-5z' fill='white'/%3E%3C/svg%3E">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
-
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#10111a;--panel:#191b28;--text:#f5f5fa;--muted:#999caf;--accent:#8067ff;--border:#292b3a;--danger:#ef6262}
 body.light{--bg:#f4f5fb;--panel:#fff;--text:#202235;--muted:#73768a;--border:#e4e5ed}
 body{background:var(--bg);color:var(--text);font-family:Arial,sans-serif;height:100vh;overflow:hidden}
-button,input,textarea{font:inherit}
-button{cursor:pointer}
+button,input,textarea{font:inherit}button{cursor:pointer}
 .app{display:flex;height:100vh}
 .sidebar{width:275px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--border);padding:18px;display:flex;flex-direction:column;gap:16px;z-index:5}
-.logo{font-size:25px;font-weight:bold;color:var(--accent)}
-.logo span{color:var(--text)}
-.newchat{background:var(--accent);color:white;border:0;padding:13px;border-radius:10px;font-size:15px;width:100%}
+.logo{display:flex;align-items:center;gap:10px;font-size:25px;font-weight:bold;letter-spacing:-1px;color:var(--text)}
+.logo .brand-name span{background:linear-gradient(100deg,#00d9ff,#268bff,#bd35ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.q-logo{width:43px;height:43px;flex-shrink:0;filter:drop-shadow(0 0 7px #087dff55)}
+.topbar .q-logo{width:34px;height:34px}
+.auth-card .q-logo{width:49px;height:49px}
+.newchat{background:linear-gradient(110deg,#00aeea,#6551ff,#a52aff);color:white;border:0;padding:13px;border-radius:10px;font-size:15px;width:100%}
 .history-title{color:var(--muted);font-size:12px;letter-spacing:.08em}
 .history-search{width:100%;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);outline:none}
 .history{overflow-y:auto;flex:1;min-height:0}
@@ -35,694 +38,268 @@ button{cursor:pointer}
 .account{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
 .main{flex:1;display:flex;flex-direction:column;min-width:0}
 .topbar{height:65px;flex-shrink:0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;justify-content:space-between;padding:0 25px}
-.topbar-left{display:flex;align-items:center;gap:12px}
-.topbar h2{font-size:19px}
+.topbar-left{display:flex;align-items:center;gap:12px}.topbar h2{font-size:19px}
+.topbar-brand{display:flex;align-items:center;gap:9px}
+.topbar-brand span{background:linear-gradient(100deg,#00d9ff,#268bff,#bd35ff);-webkit-background-clip:text;background-clip:text;color:transparent}
 .status{font-size:12px;color:#45c98b;white-space:nowrap}
 .menu-btn{display:none;background:transparent;border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 11px}
 .messages{flex:1;overflow-y:auto;padding:30px 8%;display:flex;flex-direction:column;gap:22px}
 .welcome{text-align:center;margin:auto;max-width:600px}
 .welcome h1{font-size:38px;margin-bottom:12px}
-.welcome h1 span{color:var(--accent)}
+.welcome h1 span{background:linear-gradient(100deg,#00d9ff,#268bff,#bd35ff);-webkit-background-clip:text;background-clip:text;color:transparent}
 .welcome p{color:var(--muted);line-height:1.6}
 .message{max-width:850px;width:100%;margin:0 auto;line-height:1.65;overflow-wrap:anywhere}
-.message.user{text-align:right}
-.bubble{display:inline-block;padding:14px 18px;border-radius:15px;background:var(--panel);text-align:left;max-width:100%;white-space:normal}
+.message.user{text-align:right}.bubble{display:inline-block;padding:14px 18px;border-radius:15px;background:var(--panel);text-align:left;max-width:100%;white-space:normal}
 .user .bubble{background:var(--accent);color:white;white-space:pre-wrap}
-.bubble p{margin:0 0 10px}
-.bubble p:last-child{margin-bottom:0}
-.bubble h1,.bubble h2,.bubble h3{margin:14px 0 8px;line-height:1.3}
-.bubble ul,.bubble ol{padding-left:24px;margin:8px 0}
-.bubble li{margin:4px 0}
+.bubble p{margin:0 0 10px}.bubble p:last-child{margin-bottom:0}.bubble h1,.bubble h2,.bubble h3{margin:14px 0 8px;line-height:1.3}
+.bubble ul,.bubble ol{padding-left:24px;margin:8px 0}.bubble li{margin:4px 0}
 .bubble pre{background:#090a10;color:#e9e9f4;padding:13px;border-radius:9px;overflow-x:auto;margin:10px 0}
-.bubble code{font-family:Consolas,monospace;font-size:.92em}
-.bubble :not(pre)>code{background:var(--bg);padding:2px 5px;border-radius:5px}
+.bubble code{font-family:Consolas,monospace;font-size:.92em}.bubble :not(pre)>code{background:var(--bg);padding:2px 5px;border-radius:5px}
 .bubble blockquote{border-left:3px solid var(--accent);padding-left:12px;color:var(--muted);margin:10px 0}
 .bubble table{border-collapse:collapse;display:block;max-width:100%;overflow-x:auto;margin:10px 0}
 .bubble th,.bubble td{border:1px solid var(--border);padding:7px 10px;text-align:left}
-.composer-area{padding:15px 8% 22px}
-.composer{max-width:850px;margin:auto;display:flex;gap:10px;background:var(--panel);border:1px solid var(--border);padding:10px;border-radius:16px;align-items:flex-end}
+.composer-area{padding:15px 8% 22px}.composer{max-width:850px;margin:auto;display:flex;gap:10px;background:var(--panel);border:1px solid var(--border);padding:10px;border-radius:16px;align-items:flex-end}
 textarea{flex:1;resize:none;max-height:150px;min-height:42px;background:transparent;border:0;outline:0;color:var(--text);padding:12px}
-.action{border:0;background:var(--accent);color:white;width:43px;height:43px;border-radius:12px;font-size:18px}
-.action.secondary{background:transparent;color:var(--muted)}
+.action{border:0;background:linear-gradient(110deg,#00aeea,#6551ff);color:white;width:43px;height:43px;border-radius:12px;font-size:18px}.action.secondary{background:transparent;color:var(--muted)}
 .hint{text-align:center;color:var(--muted);font-size:11px;margin-top:12px}
 .auth-wrap{position:fixed;inset:0;background:var(--bg);z-index:10;display:flex;align-items:center;justify-content:center;padding:20px}
 .auth-card{width:100%;max-width:410px;background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:28px}
-.auth-card h1{font-size:27px;margin:22px 0 8px}
-.auth-card p{color:var(--muted);line-height:1.5;margin-bottom:15px}
+.auth-card h1{font-size:27px;margin:22px 0 8px}.auth-card p{color:var(--muted);line-height:1.5;margin-bottom:15px}
 .auth-card input{width:100%;padding:13px;margin:7px 0;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:9px}
-.auth-card button{width:100%;padding:13px;margin-top:10px;background:var(--accent);color:white;border:0;border-radius:9px}
-.auth-card button:disabled{opacity:.6;cursor:wait}
-.auth-card button.alt{background:transparent;border:1px solid var(--border);color:var(--text)}
+.auth-card button{width:100%;padding:13px;margin-top:10px;background:linear-gradient(110deg,#00aeea,#6551ff,#a52aff);color:white;border:0;border-radius:9px}
+.auth-card button:disabled{opacity:.6;cursor:wait}.auth-card button.alt{background:transparent;border:1px solid var(--border);color:var(--text)}
 .auth-note{font-size:13px!important;margin-top:14px!important;min-height:18px}
-.overlay{display:none}
-.hidden{display:none!important}
-
+.overlay{display:none}.hidden{display:none!important}
 @media(max-width:700px){
  .sidebar{position:fixed;left:0;top:0;bottom:0;width:min(300px,85vw);transform:translateX(-105%);transition:transform .22s ease;padding:17px;box-shadow:8px 0 30px #0004}
  .sidebar.open{transform:translateX(0)}
  .overlay.show{display:block;position:fixed;inset:0;background:#0008;z-index:4}
- .menu-btn{display:inline-block}
- .topbar{padding:0 13px}
- .messages{padding:20px 12px}
- .composer-area{padding:12px}
- .welcome h1{font-size:29px}
- .bubble{max-width:100%}
+ .menu-btn{display:inline-block}.topbar{padding:0 13px}.messages{padding:20px 12px}
+ .composer-area{padding:12px}.welcome h1{font-size:29px}.bubble{max-width:100%}
  .chat-actions button{padding:7px}
 }
 </style>
 </head>
-
 <body>
 <div class="app">
-
  <aside class="sidebar" id="sidebar">
-  <div class="logo">✦ <span>QuBix AI</span></div>
-
+  <div class="logo">
+   <svg class="q-logo" viewBox="0 0 100 100" role="img" aria-label="QuBix logo">
+    <defs><linearGradient id="qgrad" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#00d9ff"/><stop offset=".55" stop-color="#167cff"/><stop offset="1" stop-color="#a020ff"/></linearGradient></defs>
+    <path d="M50 7a43 43 0 1 0 29.5 74.2L96 98H72L60 85A43 43 0 1 1 85 50a34 34 0 0 1-9 23l12 12A50 50 0 1 0 50 7" fill="url(#qgrad)"/>
+    <path d="M50 30l5.5 13.5L69 49l-13.5 5.5L50 68l-5.5-13.5L31 49l13.5-5.5z" fill="#fff"/>
+   </svg>
+   <div class="brand-name">QuBix <span>AI</span></div>
+  </div>
   <button class="newchat" onclick="newChat()">＋ <span>New Chat</span></button>
-
   <div class="history-title">YOUR CHATS</div>
-
-  <input class="history-search" id="historySearch"
-   placeholder="Search chats..." oninput="renderHistory()">
-
+  <input class="history-search" id="historySearch" placeholder="Search chats..." oninput="renderHistory()">
   <div class="history" id="history"></div>
-
   <div class="account" id="accountEmail"></div>
-
   <div class="sidebar-bottom">
    <button onclick="toggleTheme()">◐ <span>Theme</span></button>
    <button onclick="logout()">↪ <span>Logout</span></button>
   </div>
  </aside>
-
  <div class="overlay" id="overlay" onclick="closeSidebar()"></div>
-
  <main class="main">
-
   <header class="topbar">
    <div class="topbar-left">
-    <button class="menu-btn" onclick="toggleSidebar()">☰</button>
-    <h2>✦ QuBix AI</h2>
+    <button class="menu-btn" onclick="toggleSidebar()" aria-label="Open menu">☰</button>
+    <div class="topbar-brand">
+     <svg class="q-logo" viewBox="0 0 100 100" aria-label="QuBix logo">
+      <defs><linearGradient id="qgrad2" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#00d9ff"/><stop offset=".55" stop-color="#167cff"/><stop offset="1" stop-color="#a020ff"/></linearGradient></defs>
+      <path d="M50 7a43 43 0 1 0 29.5 74.2L96 98H72L60 85A43 43 0 1 1 85 50a34 34 0 0 1-9 23l12 12A50 50 0 1 0 50 7" fill="url(#qgrad2)"/>
+      <path d="M50 30l5.5 13.5L69 49l-13.5 5.5L50 68l-5.5-13.5L31 49l13.5-5.5z" fill="#fff"/>
+     </svg>
+     <h2>QuBix <span>AI</span></h2>
+    </div>
    </div>
    <div class="status" id="status">● Ready</div>
   </header>
-
   <section class="messages" id="messages">
-   <div class="welcome" id="welcome">
-    <h1>Hello, I'm <span>QuBix.</span></h1>
-    <p>Your intelligent AI assistant. Ask me anything, explore ideas, learn something new or get help with your work.</p>
-   </div>
+   <div class="welcome" id="welcome"><h1>Hello, I'm <span>QuBix.</span></h1><p>Your intelligent AI assistant. Ask me anything, explore ideas, learn something new or get help with your work.</p></div>
   </section>
-
   <div class="composer-area">
    <div class="composer">
-    <textarea id="prompt" placeholder="Message QuBix AI..."
-     rows="1" onkeydown="handleKey(event)"></textarea>
-
+    <textarea id="prompt" placeholder="Message QuBix AI..." rows="1" onkeydown="handleKey(event)"></textarea>
     <button class="action secondary" onclick="voiceInput()" title="Voice input">🎙</button>
     <button class="action" onclick="sendMessage()" title="Send">➤</button>
    </div>
-
    <div class="hint">QuBix AI can make mistakes. Check important information.</div>
   </div>
-
  </main>
 </div>
-
 <div class="auth-wrap" id="authScreen">
  <div class="auth-card">
-
-  <div class="logo">✦ <span>QuBix AI</span></div>
-
-  <h1 id="authHeading">Welcome back</h1>
-  <p id="authDescription">Log in to access your private chats.</p>
-
+  <div class="logo">
+   <svg class="q-logo" viewBox="0 0 100 100" role="img" aria-label="QuBix logo">
+    <defs><linearGradient id="qgrad3" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#00d9ff"/><stop offset=".55" stop-color="#167cff"/><stop offset="1" stop-color="#a020ff"/></linearGradient></defs>
+    <path d="M50 7a43 43 0 1 0 29.5 74.2L96 98H72L60 85A43 43 0 1 1 85 50a34 34 0 0 1-9 23l12 12A50 50 0 1 0 50 7" fill="url(#qgrad3)"/>
+    <path d="M50 30l5.5 13.5L69 49l-13.5 5.5L50 68l-5.5-13.5L31 49l13.5-5.5z" fill="#fff"/>
+   </svg>
+   <div class="brand-name">QuBix <span>AI</span></div>
+  </div>
+  <h1 id="authHeading">Welcome back</h1><p id="authDescription">Log in to access your private chats.</p>
   <input id="authEmail" type="email" placeholder="Email address" autocomplete="email">
-
-  <input id="authPassword" type="password"
-   placeholder="Password (at least 6 characters)" autocomplete="current-password">
-
+  <input id="authPassword" type="password" placeholder="Password (at least 6 characters)" autocomplete="current-password">
   <button id="authSubmit" type="button" onclick="submitAuth()">Log in</button>
-
   <button class="alt" id="authSwitch" type="button" onclick="switchAuth()">Create a new account</button>
-
   <p class="auth-note" id="authNote" aria-live="polite"></p>
  </div>
 </div>
-
 <script>
 "use strict";
-
 const SUPABASE_URL="https://tehtdnaziyjwuacfxzsk.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY="sb_publishable_k50vs5oP1POySSKevkaSYw_fgPn7O_T";
-
-let supabaseClient=null;
-let currentUser=null;
-let chats=[];
-let currentChat=null;
-let busy=false;
-let authMode="login";
-let authListenerStarted=false;
-
+let supabaseClient=null,currentUser=null,chats=[],currentChat=null,busy=false,authMode="login",authListenerStarted=false;
 const el=id=>document.getElementById(id);
-
-function setNote(message){
- el("authNote").textContent=message;
-}
-
-function setStatus(message){
- el("status").textContent="● "+message;
-}
-
-function welcomeHTML(){
- return `<div class="welcome" id="welcome">
- <h1>Hello, I'm <span>QuBix.</span></h1>
- <p>Your intelligent AI assistant. What would you like to explore today?</p>
- </div>`;
-}
-
+function setNote(message){el("authNote").textContent=message}
+function setStatus(message){el("status").textContent="● "+message}
+function welcomeHTML(){return `<div class="welcome" id="welcome"><h1>Hello, I'm <span>QuBix.</span></h1><p>Your intelligent AI assistant. What would you like to explore today?</p></div>`}
 function switchAuth(){
  authMode=authMode==="login"?"signup":"login";
-
- el("authHeading").textContent=authMode==="login"
-  ?"Welcome back":"Create your account";
-
- el("authDescription").textContent=authMode==="login"
-  ?"Log in to access your private chats."
-  :"Sign up to save your chats privately.";
-
- el("authSubmit").textContent=authMode==="login"
-  ?"Log in":"Create account";
-
- el("authSwitch").textContent=authMode==="login"
-  ?"Create a new account":"I already have an account";
-
- el("authPassword").value="";
- setNote("");
+ el("authHeading").textContent=authMode==="login"?"Welcome back":"Create your account";
+ el("authDescription").textContent=authMode==="login"?"Log in to access your private chats.":"Sign up to save your chats privately.";
+ el("authSubmit").textContent=authMode==="login"?"Log in":"Create account";
+ el("authSwitch").textContent=authMode==="login"?"Create a new account":"I already have an account";
+ el("authPassword").value="";setNote("");
 }
-
 async function submitAuth(){
- if(!supabaseClient){
-  setNote("Supabase connection is not ready. Refresh the page.");
-  return;
- }
-
- const email=el("authEmail").value.trim();
- const password=el("authPassword").value;
-
- if(!email||!password){
-  setNote("Please enter your email and password.");
-  return;
- }
-
- if(password.length<6){
-  setNote("Password must be at least 6 characters.");
-  return;
- }
-
- const button=el("authSubmit");
- button.disabled=true;
- button.textContent="Please wait...";
- setNote("");
-
+ if(!supabaseClient){setNote("Supabase connection is not ready. Refresh the page.");return}
+ const email=el("authEmail").value.trim(),password=el("authPassword").value;
+ if(!email||!password){setNote("Please enter your email and password.");return}
+ if(password.length<6){setNote("Password must be at least 6 characters.");return}
+ const button=el("authSubmit");button.disabled=true;button.textContent="Please wait...";setNote("");
  try{
   if(authMode==="signup"){
-   const {data,error}=await supabaseClient.auth.signUp({email,password});
-   if(error)throw error;
-
-   setNote(data.session
-    ?"Account created. Signing you in..."
-    :"Account created! Check your email to confirm, then log in.");
+   const {data,error}=await supabaseClient.auth.signUp({email,password});if(error)throw error;
+   setNote(data.session?"Account created. Signing you in...":"Account created! Check your email to confirm, then log in.");
   }else{
-   const {error}=await supabaseClient.auth.signInWithPassword({email,password});
-   if(error)throw error;
-   setNote("Login successful!");
+   const {error}=await supabaseClient.auth.signInWithPassword({email,password});if(error)throw error;setNote("Login successful!");
   }
- }catch(error){
-  console.error(error);
-  setNote(error.message||"Authentication failed");
- }finally{
-  button.disabled=false;
-  button.textContent=authMode==="login"?"Log in":"Create account";
- }
+ }catch(error){console.error(error);setNote(error.message||"Authentication failed")}
+ finally{button.disabled=false;button.textContent=authMode==="login"?"Log in":"Create account"}
 }
-
-function showApp(user){
- currentUser=user;
- el("authScreen").classList.add("hidden");
- el("accountEmail").textContent=user.email||"Signed in";
- loadChats();
-}
-
+function showApp(user){currentUser=user;el("authScreen").classList.add("hidden");el("accountEmail").textContent=user.email||"Signed in";loadChats()}
 async function logout(){
- if(!supabaseClient)return;
-
- const {error}=await supabaseClient.auth.signOut();
-
- if(error){
-  alert(error.message);
-  return;
- }
-
- currentUser=null;
- chats=[];
- currentChat=null;
- el("history").innerHTML="";
- el("messages").innerHTML=welcomeHTML();
- el("authScreen").classList.remove("hidden");
- setNote("");
+ if(!supabaseClient)return;const {error}=await supabaseClient.auth.signOut();if(error){alert(error.message);return}
+ currentUser=null;chats=[];currentChat=null;el("history").innerHTML="";el("messages").innerHTML=welcomeHTML();el("authScreen").classList.remove("hidden");setNote("");
 }
-
 async function init(){
- if(localStorage.getItem("qubix_theme")==="light"){
-  document.body.classList.add("light");
- }
-
- if(!window.supabase||!window.supabase.createClient){
-  setNote("Supabase library could not load. Check your internet connection and refresh.");
-  return;
- }
-
+ if(localStorage.getItem("qubix_theme")==="light")document.body.classList.add("light");
+ if(!window.supabase||!window.supabase.createClient){setNote("Supabase library could not load. Check your internet connection and refresh.");return}
  try{
-  supabaseClient=window.supabase.createClient(
-   SUPABASE_URL,
-   SUPABASE_PUBLISHABLE_KEY
-  );
-
-  const {data,error}=await supabaseClient.auth.getSession();
-  if(error)throw error;
-
-  if(data.session?.user){
-   showApp(data.session.user);
-  }
-
-  if(!authListenerStarted){
-   authListenerStarted=true;
-
-   supabaseClient.auth.onAuthStateChange((event,session)=>{
-    if(session?.user){
-     showApp(session.user);
-    }else if(event==="SIGNED_OUT"){
-     currentUser=null;
-     chats=[];
-     currentChat=null;
-     el("authScreen").classList.remove("hidden");
-    }
-   });
-  }
-
- }catch(error){
-  console.error(error);
-  setNote("Connection error: "+error.message);
- }
+  supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
+  const {data,error}=await supabaseClient.auth.getSession();if(error)throw error;
+  if(data.session?.user)showApp(data.session.user);
+  if(!authListenerStarted){authListenerStarted=true;supabaseClient.auth.onAuthStateChange((event,session)=>{
+   if(session?.user)showApp(session.user);else if(event==="SIGNED_OUT"){currentUser=null;chats=[];currentChat=null;el("authScreen").classList.remove("hidden")}
+  })}
+ }catch(error){console.error(error);setNote("Connection error: "+error.message)}
 }
-
 async function loadChats(){
  if(!currentUser)return;
-
- const {data,error}=await supabaseClient
-  .from("chats")
-  .select("id,title,created_at,updated_at")
-  .eq("user_id",currentUser.id)
-  .order("updated_at",{ascending:false});
-
- if(error){
-  console.error(error);
-  alert("Could not load chats: "+error.message);
-  return;
- }
-
- chats=data||[];
- renderHistory();
+ const {data,error}=await supabaseClient.from("chats").select("id,title,created_at,updated_at").eq("user_id",currentUser.id).order("updated_at",{ascending:false});
+ if(error){console.error(error);alert("Could not load chats: "+error.message);return}
+ chats=data||[];renderHistory();
 }
-
 function renderHistory(){
- const box=el("history");
- const query=(el("historySearch")?.value||"").trim().toLowerCase();
-
- box.innerHTML="";
-
- const visible=chats.filter(chat=>
-  (chat.title||"").toLowerCase().includes(query)
- );
-
+ const box=el("history"),query=(el("historySearch")?.value||"").trim().toLowerCase();box.innerHTML="";
+ const visible=chats.filter(chat=>(chat.title||"").toLowerCase().includes(query));
  visible.forEach(chat=>{
-  const item=document.createElement("div");
-
-  item.className="history-item"+
-   (currentChat?.id===chat.id?" active":"");
-
-  const open=document.createElement("button");
-  open.className="chat-open";
-  open.textContent=chat.title||"Untitled chat";
-  open.title=chat.title||"";
-  open.onclick=()=>openChat(chat.id);
-
-  const actions=document.createElement("div");
-  actions.className="chat-actions";
-
-  const rename=document.createElement("button");
-  rename.type="button";
-  rename.textContent="✎";
-  rename.title="Rename chat";
-  rename.setAttribute("aria-label","Rename chat");
-  rename.onclick=()=>renameChat(chat.id);
-
-  const del=document.createElement("button");
-  del.type="button";
-  del.className="delete";
-  del.textContent="×";
-  del.title="Delete chat";
-  del.setAttribute("aria-label","Delete chat");
-  del.onclick=()=>deleteChat(chat.id);
-
-  actions.append(rename,del);
-  item.append(open,actions);
-  box.appendChild(item);
+  const item=document.createElement("div");item.className="history-item"+(currentChat?.id===chat.id?" active":"");
+  const open=document.createElement("button");open.className="chat-open";open.textContent=chat.title||"Untitled chat";open.title=chat.title||"";open.onclick=()=>openChat(chat.id);
+  const actions=document.createElement("div");actions.className="chat-actions";
+  const rename=document.createElement("button");rename.type="button";rename.textContent="✎";rename.title="Rename chat";rename.setAttribute("aria-label","Rename chat");rename.onclick=()=>renameChat(chat.id);
+  const del=document.createElement("button");del.type="button";del.className="delete";del.textContent="×";del.title="Delete chat";del.setAttribute("aria-label","Delete chat");del.onclick=()=>deleteChat(chat.id);
+  actions.append(rename,del);item.append(open,actions);box.appendChild(item);
  });
-
- if(!visible.length){
-  const empty=document.createElement("div");
-  empty.style.cssText="color:var(--muted);font-size:13px;padding:12px";
-  empty.textContent=query?"No matching chats.":"No chats yet.";
-  box.appendChild(empty);
- }
+ if(!visible.length){const empty=document.createElement("div");empty.style.cssText="color:var(--muted);font-size:13px;padding:12px";empty.textContent=query?"No matching chats.":"No chats yet.";box.appendChild(empty)}
 }
-
 async function renameChat(id){
- const chat=chats.find(c=>c.id===id);
- if(!chat||!currentUser)return;
-
- const title=prompt("Enter a new chat name:",chat.title||"");
- if(title===null)return;
-
- const clean=title.trim();
-
- if(!clean){
-  alert("Chat name cannot be empty.");
-  return;
- }
-
- const {error}=await supabaseClient
-  .from("chats")
-  .update({title:clean})
-  .eq("id",id)
-  .eq("user_id",currentUser.id);
-
- if(error){
-  alert("Could not rename chat: "+error.message);
-  return;
- }
-
- if(currentChat?.id===id){
-  currentChat={...currentChat,title:clean};
- }
-
- await loadChats();
+ const chat=chats.find(c=>c.id===id);if(!chat||!currentUser)return;
+ const title=prompt("Enter a new chat name:",chat.title||"");if(title===null)return;
+ const clean=title.trim();if(!clean){alert("Chat name cannot be empty.");return}
+ const {error}=await supabaseClient.from("chats").update({title:clean}).eq("id",id).eq("user_id",currentUser.id);
+ if(error){alert("Could not rename chat: "+error.message);return}
+ if(currentChat?.id===id)currentChat={...currentChat,title:clean};await loadChats();
 }
-
 async function deleteChat(id){
- const chat=chats.find(c=>c.id===id);
- if(!chat||!currentUser)return;
-
- if(!confirm(`Delete "${chat.title}" and all its messages? This cannot be undone.`)){
-  return;
- }
-
- const {error}=await supabaseClient
-  .from("chats")
-  .delete()
-  .eq("id",id)
-  .eq("user_id",currentUser.id);
-
- if(error){
-  alert("Could not delete chat: "+error.message);
-  return;
- }
-
- if(currentChat?.id===id){
-  currentChat=null;
-  el("messages").innerHTML=welcomeHTML();
- }
-
+ const chat=chats.find(c=>c.id===id);if(!chat||!currentUser)return;
+ if(!confirm(`Delete "${chat.title}" and all its messages? This cannot be undone.`))return;
+ const {error}=await supabaseClient.from("chats").delete().eq("id",id).eq("user_id",currentUser.id);
+ if(error){alert("Could not delete chat: "+error.message);return}
+ if(currentChat?.id===id){currentChat=null;el("messages").innerHTML=welcomeHTML()}
  await loadChats();
 }
-
-function newChat(){
- currentChat=null;
- el("messages").innerHTML=welcomeHTML();
- renderHistory();
- closeSidebar();
- el("prompt").focus();
-}
-
+function newChat(){currentChat=null;el("messages").innerHTML=welcomeHTML();renderHistory();closeSidebar();el("prompt").focus()}
 async function openChat(id){
- const chat=chats.find(item=>item.id===id);
- if(!chat)return;
-
- currentChat=chat;
- renderHistory();
- closeSidebar();
-
- const {data,error}=await supabaseClient
-  .from("messages")
-  .select("id,role,content,created_at")
-  .eq("chat_id",id)
-  .order("created_at",{ascending:true});
-
- if(error){
-  alert("Could not load messages: "+error.message);
-  return;
- }
-
- const box=el("messages");
- box.innerHTML="";
-
- if(!data||!data.length){
-  box.innerHTML=welcomeHTML();
-  return;
- }
-
- data.forEach(message=>{
-  addBubble(message.content,message.role);
- });
+ const chat=chats.find(item=>item.id===id);if(!chat)return;currentChat=chat;renderHistory();closeSidebar();
+ const {data,error}=await supabaseClient.from("messages").select("id,role,content,created_at").eq("chat_id",id).order("created_at",{ascending:true});
+ if(error){alert("Could not load messages: "+error.message);return}
+ const box=el("messages");box.innerHTML="";
+ if(!data||!data.length){box.innerHTML=welcomeHTML();return}
+ data.forEach(message=>addBubble(message.content,message.role));
 }
-
 function renderMarkdown(target,text){
  if(window.marked&&window.DOMPurify){
-  try{
-   target.innerHTML=window.DOMPurify.sanitize(
-    window.marked.parse(text,{breaks:true,gfm:true})
-   );
-   return;
-  }catch(error){
-   console.warn("Markdown rendering fallback:",error);
-  }
+  try{target.innerHTML=window.DOMPurify.sanitize(window.marked.parse(text,{breaks:true,gfm:true}));return}catch(error){console.warn("Markdown rendering fallback:",error)}
  }
-
  target.textContent=text;
 }
-
 function addBubble(text,role){
- const box=el("messages");
- const welcome=el("welcome");
-
- if(welcome)welcome.remove();
-
- const row=document.createElement("div");
- row.className="message "+role;
-
- const bubble=document.createElement("div");
- bubble.className="bubble";
-
- if(role==="assistant"){
-  renderMarkdown(bubble,text);
- }else{
-  bubble.textContent=text;
- }
-
- row.appendChild(bubble);
- box.appendChild(row);
- box.scrollTop=box.scrollHeight;
-
- return row;
+ const box=el("messages"),welcome=el("welcome");if(welcome)welcome.remove();
+ const row=document.createElement("div");row.className="message "+role;
+ const bubble=document.createElement("div");bubble.className="bubble";
+ if(role==="assistant")renderMarkdown(bubble,text);else bubble.textContent=text;
+ row.appendChild(bubble);box.appendChild(row);box.scrollTop=box.scrollHeight;return row;
 }
-
-function handleKey(event){
- if(event.key==="Enter"&&!event.shiftKey){
-  event.preventDefault();
-  sendMessage();
- }
-}
-
+function handleKey(event){if(event.key==="Enter"&&!event.shiftKey){event.preventDefault();sendMessage()}}
 async function saveMessage(chatId,role,content){
- const {error}=await supabaseClient
-  .from("messages")
-  .insert({
-   chat_id:chatId,
-   user_id:currentUser.id,
-   role,
-   content
-  });
-
- if(error)throw error;
+ const {error}=await supabaseClient.from("messages").insert({chat_id:chatId,user_id:currentUser.id,role,content});if(error)throw error;
 }
-
 async function sendMessage(){
- const input=el("prompt");
- const message=input.value.trim();
-
- if(!message||busy||!currentUser)return;
-
- input.value="";
- busy=true;
- setStatus("Thinking...");
- addBubble(message,"user");
-
- let loading=null;
-
+ const input=el("prompt"),message=input.value.trim();if(!message||busy||!currentUser)return;
+ input.value="";busy=true;setStatus("Thinking...");addBubble(message,"user");
  try{
-
   if(!currentChat){
-   const {data,error}=await supabaseClient
-    .from("chats")
-    .insert({
-     user_id:currentUser.id,
-     title:message.slice(0,35)
-    })
-    .select()
-    .single();
-
-   if(error)throw error;
-
-   currentChat=data;
-   chats.unshift(data);
-   renderHistory();
-
+   const {data,error}=await supabaseClient.from("chats").insert({user_id:currentUser.id,title:message.slice(0,35)}).select().single();
+   if(error)throw error;currentChat=data;chats.unshift(data);renderHistory();
   }else{
-
-   const {error}=await supabaseClient
-    .from("chats")
-    .update({updated_at:new Date().toISOString()})
-    .eq("id",currentChat.id)
-    .eq("user_id",currentUser.id);
-
+   const {error}=await supabaseClient.from("chats").update({updated_at:new Date().toISOString()}).eq("id",currentChat.id).eq("user_id",currentUser.id);
    if(error)throw error;
   }
-
   await saveMessage(currentChat.id,"user",message);
-
-  loading=addBubble("QuBix is thinking...","assistant");
-
-  const {data:{session},error:sessionError}=
-   await supabaseClient.auth.getSession();
-
+  const loading=addBubble("QuBix is thinking...","assistant");
+  const {data:{session},error:sessionError}=await supabaseClient.auth.getSession();
   if(sessionError)throw sessionError;
-
-  if(!session?.access_token){
-   throw new Error("Your session expired. Please log in again.");
-  }
-
-  // Load this chat's saved history, including the message just sent.
-  const {data:history,error:historyError}=await supabaseClient
-   .from("messages")
-   .select("role,content")
-   .eq("chat_id",currentChat.id)
-   .order("created_at",{ascending:true});
-
-  if(historyError)throw historyError;
-
+  if(!session?.access_token)throw new Error("Your session expired. Please log in again.");
   const response=await fetch("/api/chat",{
    method:"POST",
    headers:{
     "Content-Type":"application/json",
     "Authorization":`Bearer ${session.access_token}`
    },
-   body:JSON.stringify({
-    message,
-    history:history||[]
-   })
+   body:JSON.stringify({message})
   });
-
-  let data={};
-
-  try{
-   data=await response.json();
-  }catch(_){}
-
-  if(!response.ok){
-   throw new Error(data.error||"AI request failed.");
-  }
-
-  const reply=data.reply||"No answer generated.";
-
-  renderMarkdown(loading.querySelector(".bubble"),reply);
-
-  await saveMessage(currentChat.id,"assistant",reply);
-  await loadChats();
-
- }catch(error){
-
-  console.error("Chat error:",error);
-
-  if(loading){
-   renderMarkdown(
-    loading.querySelector(".bubble"),
-    "Error: "+error.message
-   );
-  }else{
-   addBubble("Error: "+error.message,"assistant");
-  }
-
- }finally{
-  busy=false;
-  setStatus("Ready");
- }
+  let data={};try{data=await response.json()}catch(_){}
+  if(!response.ok)throw new Error(data.error||"AI request failed.");
+  const reply=data.reply||"No answer generated.";renderMarkdown(loading.querySelector(".bubble"),reply);
+  await saveMessage(currentChat.id,"assistant",reply);await loadChats();
+ }catch(error){console.error("Chat error:",error);addBubble("Error: "+error.message,"assistant")}
+ finally{busy=false;setStatus("Ready")}
 }
-
-function toggleTheme(){
- document.body.classList.toggle("light");
-
- localStorage.setItem(
-  "qubix_theme",
-  document.body.classList.contains("light")?"light":"dark"
- );
-}
-
+function toggleTheme(){document.body.classList.toggle("light");localStorage.setItem("qubix_theme",document.body.classList.contains("light")?"light":"dark")}
 function voiceInput(){
- const SpeechRecognition=
-  window.SpeechRecognition||window.webkitSpeechRecognition;
-
- if(!SpeechRecognition){
-  alert("Voice input is not supported in this browser.");
-  return;
- }
-
- const recognition=new SpeechRecognition();
-
- recognition.lang="en-US";
-
- recognition.onresult=event=>{
-  el("prompt").value=event.results[0][0].transcript;
- };
-
- recognition.onerror=event=>{
-  alert("Voice input error: "+event.error);
- };
-
- recognition.start();
+ const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+ if(!SpeechRecognition){alert("Voice input is not supported in this browser.");return}
+ const recognition=new SpeechRecognition();recognition.lang="en-US";
+ recognition.onresult=event=>{el("prompt").value=event.results[0][0].transcript};
+ recognition.onerror=event=>alert("Voice input error: "+event.error);recognition.start();
 }
-
-function toggleSidebar(){
- el("sidebar").classList.toggle("open");
- el("overlay").classList.toggle("show");
-}
-
-function closeSidebar(){
- el("sidebar").classList.remove("open");
- el("overlay").classList.remove("show");
-}
-
+function toggleSidebar(){el("sidebar").classList.toggle("open");el("overlay").classList.toggle("show")}
+function closeSidebar(){el("sidebar").classList.remove("open");el("overlay").classList.remove("show")}
 document.addEventListener("DOMContentLoaded",init);
 </script>
 </body>
