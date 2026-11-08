@@ -2,833 +2,638 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>QuBix AI</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='42' fill='%238067ff'/%3E%3C/svg%3E">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
-
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
-*{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#10111a;--panel:#191b28;--text:#f5f5fa;--muted:#999caf;--accent:#8067ff;--border:#292b3a;--danger:#ef6262}
 body.light{--bg:#f4f5fb;--panel:#fff;--text:#202235;--muted:#73768a;--border:#e4e5ed}
-body{background:var(--bg);color:var(--text);font-family:Arial,sans-serif;height:100vh;overflow:hidden}
-button,input,textarea{font:inherit}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font:15px Arial,sans-serif;height:100vh;overflow:hidden}
+button,input,textarea,select{font:inherit}
 button{cursor:pointer}
 .app{display:flex;height:100vh}
-.sidebar{width:275px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--border);padding:18px;display:flex;flex-direction:column;gap:16px;z-index:5}
-.logo{display:flex;align-items:center;gap:10px;font-size:25px;font-weight:bold;letter-spacing:-1px;color:var(--text)}
-.logo span,.topbar-brand span,.welcome h1 span{background:linear-gradient(100deg,#00d9ff,#268bff,#bd35ff);-webkit-background-clip:text;background-clip:text;color:transparent}
-.q-logo{width:43px;height:43px;flex-shrink:0}
-.newchat{background:linear-gradient(110deg,#00aeea,#6551ff,#a52aff);color:white;border:0;padding:13px;border-radius:10px;font-size:15px;width:100%}
-.history-title{color:var(--muted);font-size:12px;letter-spacing:.08em}
-.history-search{width:100%;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);outline:none}
-.history{overflow-y:auto;flex:1;min-height:0}
-.history-item{display:flex;align-items:center;gap:5px;padding:8px;border-radius:9px;margin-top:5px;color:var(--muted)}
-.history-item:hover,.history-item.active{background:var(--bg);color:var(--text)}
-.chat-open{flex:1;min-width:0;text-align:left;background:transparent;border:0;color:inherit;padding:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.chat-actions{display:flex;gap:3px;flex-shrink:0}
-.chat-actions button{border:0;background:transparent;color:var(--muted);padding:5px 6px;border-radius:6px}
-.chat-actions button:hover{background:var(--border);color:var(--text)}
-.chat-actions .delete:hover{color:var(--danger)}
-.sidebar-bottom{display:flex;gap:8px}
-.sidebar-bottom button{flex:1;padding:10px;border:1px solid var(--border);background:transparent;color:var(--text);border-radius:8px}
+.sidebar{width:275px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--border);padding:17px;display:flex;flex-direction:column;gap:13px;z-index:5}
+.logo{font-size:24px;font-weight:bold;color:var(--accent);padding:5px 0}
+.logo span{color:var(--text)}
+.btn{border:0;background:var(--accent);color:white;padding:11px 13px;border-radius:9px}
+.btn.secondary{background:transparent;border:1px solid var(--border);color:var(--text)}
+.btn.danger{background:#a93242}
+.history-title{font-size:11px;color:var(--muted);letter-spacing:1px}
+.history-search,.field{width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);outline:none}
+.history{overflow:auto;flex:1;min-height:0}
+.history-item{display:flex;gap:4px;align-items:center;padding:6px;border-radius:8px;margin:4px 0}
+.history-item.active,.history-item:hover{background:var(--bg)}
+.chat-open{flex:1;min-width:0;text-align:left;background:none;border:0;color:var(--text);padding:7px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-actions button{border:0;background:none;color:var(--muted);padding:5px}
+.chat-actions .delete{color:var(--danger)}
+.side-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.side-actions button{padding:9px;border:1px solid var(--border);background:transparent;color:var(--text);border-radius:8px}
 .account{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
-.main{flex:1;display:flex;flex-direction:column;min-width:0}
-.topbar{height:65px;flex-shrink:0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;justify-content:space-between;padding:0 25px}
-.topbar-left{display:flex;align-items:center;gap:12px}
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.topbar{height:62px;flex-shrink:0;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 22px}
+.topbar-left{display:flex;align-items:center;gap:10px}
 .topbar h2{font-size:19px}
-.topbar-brand{display:flex;align-items:center;gap:9px}
-.status{font-size:12px;color:#45c98b;white-space:nowrap}
-.menu-btn{display:none;background:transparent;border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 11px}
-.messages{flex:1;overflow-y:auto;padding:30px 8%;display:flex;flex-direction:column;gap:22px}
-.welcome{text-align:center;margin:auto;max-width:600px}
+.status{font-size:12px;color:#45c98b}
+.menu-btn{display:none;background:transparent;border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px}
+.messages{flex:1;overflow-y:auto;padding:28px 8%;display:flex;flex-direction:column;gap:20px}
+.welcome{text-align:center;margin:auto;max-width:620px}
 .welcome h1{font-size:38px;margin-bottom:12px}
+.welcome h1 span{color:var(--accent)}
 .welcome p{color:var(--muted);line-height:1.6}
 .message{max-width:850px;width:100%;margin:0 auto;line-height:1.65;overflow-wrap:anywhere}
 .message.user{text-align:right}
-.bubble{display:inline-block;padding:14px 18px;border-radius:15px;background:var(--panel);text-align:left;max-width:100%;white-space:normal}
+.bubble{display:inline-block;padding:14px 18px;border-radius:15px;background:var(--panel);text-align:left;max-width:100%}
 .user .bubble{background:var(--accent);color:white;white-space:pre-wrap}
-.bubble p{margin:0 0 10px}
-.bubble p:last-child{margin-bottom:0}
-.bubble h1,.bubble h2,.bubble h3{margin:14px 0 8px;line-height:1.3}
+.bubble p{margin:0 0 10px}.bubble p:last-child{margin:0}
+.bubble h1,.bubble h2,.bubble h3{margin:14px 0 8px}
 .bubble ul,.bubble ol{padding-left:24px;margin:8px 0}
-.bubble li{margin:4px 0}
-.bubble pre{background:#090a10;color:#e9e9f4;padding:13px;border-radius:9px;overflow-x:auto;margin:10px 0}
-.bubble code{font-family:Consolas,monospace;font-size:.92em}
+.bubble pre{background:#090a10;color:#eee;padding:13px;border-radius:9px;overflow:auto;margin:10px 0}
+.bubble code{font-family:Consolas,monospace}
 .bubble :not(pre)>code{background:var(--bg);padding:2px 5px;border-radius:5px}
-.bubble blockquote{border-left:3px solid var(--accent);padding-left:12px;color:var(--muted);margin:10px 0}
-.bubble table{border-collapse:collapse;display:block;max-width:100%;overflow-x:auto;margin:10px 0}
-.bubble th,.bubble td{border:1px solid var(--border);padding:7px 10px;text-align:left}
-.composer-area{padding:15px 8% 22px}
-.composer{max-width:850px;margin:auto;display:flex;gap:10px;background:var(--panel);border:1px solid var(--border);padding:10px;border-radius:16px;align-items:flex-end}
-textarea{flex:1;resize:none;max-height:150px;min-height:42px;background:transparent;border:0;outline:0;color:var(--text);padding:12px}
-.action{border:0;background:linear-gradient(110deg,#00aeea,#6551ff);color:white;width:43px;height:43px;border-radius:12px;font-size:18px}
-.action.secondary{background:transparent;color:var(--muted)}
-.hint{text-align:center;color:var(--muted);font-size:11px;margin-top:12px}
-.auth-wrap{position:fixed;inset:0;background:var(--bg);z-index:10;display:flex;align-items:center;justify-content:center;padding:20px}
-.auth-card{width:100%;max-width:410px;background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:28px}
-.auth-card h1{font-size:27px;margin:22px 0 8px}
-.auth-card p{color:var(--muted);line-height:1.5;margin-bottom:15px}
-.auth-card input{width:100%;padding:13px;margin:7px 0;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:9px}
-.auth-card button{width:100%;padding:13px;margin-top:10px;background:linear-gradient(110deg,#00aeea,#6551ff,#a52aff);color:white;border:0;border-radius:9px}
-.auth-card button:disabled{opacity:.6;cursor:wait}
-.auth-card button.alt{background:transparent;border:1px solid var(--border);color:var(--text)}
-.auth-note{font-size:13px!important;margin-top:14px!important;min-height:18px}
-.overlay{display:none}
+.bubble a{color:#9f91ff}
+.bubble table{border-collapse:collapse;display:block;overflow:auto}
+.bubble td,.bubble th{border:1px solid var(--border);padding:7px}
+.image-result{display:block;max-width:100%;border-radius:12px;margin-top:10px}
+.composer-area{padding:12px 8% 20px}
+.composer{max-width:850px;margin:auto;background:var(--panel);border:1px solid var(--border);padding:9px;border-radius:15px}
+.composer textarea{width:100%;resize:none;max-height:130px;min-height:43px;background:transparent;border:0;outline:0;color:var(--text);padding:10px}
+.composer-tools{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.tool{padding:9px 11px;background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px}
+.tool.active{color:var(--accent);border-color:var(--accent)}
+.send{margin-left:auto;background:var(--accent);border:0;color:white;width:42px;height:40px;border-radius:10px}
+.hint{text-align:center;color:var(--muted);font-size:11px;margin-top:10px}
+.auth-wrap,.modal-wrap{position:fixed;inset:0;background:#080910d9;z-index:20;display:flex;align-items:center;justify-content:center;padding:18px}
+.auth-card,.modal{width:100%;max-width:460px;max-height:90vh;overflow:auto;background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:24px}
+.auth-card h1{margin:20px 0 8px}.auth-card p{color:var(--muted);line-height:1.5;margin-bottom:14px}
+.auth-card input{margin:6px 0}
+.auth-card button{width:100%;margin-top:9px}
+.auth-note{font-size:13px;margin-top:12px;min-height:18px}
 .hidden{display:none!important}
-.qubix-tools,.file-status{max-width:850px;margin:0 auto 8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;color:var(--muted);font-size:12px}
-.qubix-tools select,.qubix-tools label,.qubix-tools button{font-size:12px;border:1px solid var(--border);background:var(--panel);color:var(--text);padding:8px;border-radius:8px}
-.qubix-tools button{background:linear-gradient(110deg,#00aeea,#6551ff);color:white;border:0;cursor:pointer}
-.file-status{display:block}
+.modal h2{margin-bottom:15px}
+.modal label{display:block;font-size:13px;color:var(--muted);margin:13px 0 6px}
+.modal input,.modal textarea,.modal select{width:100%;padding:11px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text)}
+.modal textarea{min-height:90px;resize:vertical}
+.modal-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+.modal-actions button{flex:1}
+.memory-list{display:flex;flex-direction:column;gap:8px;max-height:42vh;overflow:auto}
+.memory-item{padding:11px;border:1px solid var(--border);border-radius:9px;display:flex;gap:8px;align-items:center}
+.memory-text{flex:1;overflow-wrap:anywhere;font-size:13px}
+.memory-item button{border:0;background:transparent;color:var(--danger);padding:7px}
+.file-label{font-size:12px;color:var(--muted);padding:5px}
 @media(max-width:700px){
- .sidebar{position:fixed;left:0;top:0;bottom:0;width:min(300px,85vw);transform:translateX(-105%);transition:transform .22s ease;padding:17px;box-shadow:8px 0 30px #0004}
+ .sidebar{position:fixed;left:0;top:0;bottom:0;width:min(300px,85vw);transform:translateX(-105%);transition:transform .2s}
  .sidebar.open{transform:translateX(0)}
  .overlay.show{display:block;position:fixed;inset:0;background:#0008;z-index:4}
- .menu-btn{display:inline-block}
- .topbar{padding:0 13px}
- .messages{padding:20px 12px}
- .composer-area{padding:12px}
+ .menu-btn{display:block}.topbar{padding:0 12px}
+ .messages{padding:18px 12px}.composer-area{padding:10px}
  .welcome h1{font-size:29px}
- .bubble{max-width:100%}
- .chat-actions button{padding:7px}
 }
 </style>
 </head>
-
 <body>
 <div class="app">
- <aside class="sidebar" id="sidebar">
-  <div class="logo">
-   <svg class="q-logo" viewBox="0 0 100 100" role="img" aria-label="QuBix logo">
-    <defs><linearGradient id="qgrad" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#00d9ff"/><stop offset=".55" stop-color="#167cff"/><stop offset="1" stop-color="#a020ff"/></linearGradient></defs>
-    <path d="M50 7a43 43 0 1 0 29.5 74.2L96 98H72L60 85A43 43 0 1 1 85 50a34 34 0 0 1-9 23l12 12A50 50 0 1 0 50 7" fill="url(#qgrad)"/>
-    <path d="M50 30l5.5 13.5L69 49l-13.5 5.5L50 68l-5.5-13.5L31 49l13.5-5.5z" fill="#fff"/>
-   </svg>
-   <div>QuBix <span>AI</span></div>
+<aside class="sidebar" id="sidebar">
+ <div class="logo">✦ <span>QuBix AI</span></div>
+ <button class="btn" onclick="newChat()">＋ New Chat</button>
+ <button class="btn secondary" onclick="openMemories()">🧠 Memory Manager</button>
+ <button class="btn secondary" onclick="openSettings()">⚙ Profile Settings</button>
+ <div class="history-title">YOUR CHATS</div>
+ <input class="history-search" id="historySearch" placeholder="Search chats..." oninput="renderHistory()">
+ <div class="history" id="history"></div>
+ <div class="account" id="accountEmail"></div>
+ <div class="side-actions">
+  <button onclick="toggleTheme()">◐ Theme</button>
+  <button onclick="logout()">↪ Logout</button>
+ </div>
+</aside>
+<div class="overlay hidden" id="overlay" onclick="closeSidebar()"></div>
+<main class="main">
+ <header class="topbar">
+  <div class="topbar-left">
+   <button class="menu-btn" onclick="toggleSidebar()">☰</button>
+   <h2>✦ QuBix AI</h2>
   </div>
-
-  <button class="newchat" onclick="newChat()">＋ New Chat</button>
-  <div class="history-title">YOUR CHATS</div>
-  <input class="history-search" id="historySearch" placeholder="Search chats..." oninput="renderHistory()">
-  <div class="history" id="history"></div>
-  <div class="account" id="accountEmail"></div>
-
-  <div class="sidebar-bottom">
-   <button onclick="toggleTheme()">◐ Theme</button>
-   <button onclick="logout()">↪ Logout</button>
+  <div class="status" id="status">● Ready</div>
+ </header>
+ <section class="messages" id="messages">
+  <div class="welcome" id="welcome">
+   <h1>Hello, I'm <span>QuBix.</span></h1>
+   <p>Your intelligent AI assistant. Ask me anything, explore ideas, learn something new or get help with your work.</p>
   </div>
- </aside>
-
- <div class="overlay" id="overlay" onclick="closeSidebar()"></div>
-
- <main class="main">
-  <header class="topbar">
-   <div class="topbar-left">
-    <button class="menu-btn" onclick="toggleSidebar()" aria-label="Open menu">☰</button>
-    <div class="topbar-brand">
-     <svg class="q-logo" viewBox="0 0 100 100" aria-label="QuBix logo">
-      <defs><linearGradient id="qgrad2" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#00d9ff"/><stop offset=".55" stop-color="#167cff"/><stop offset="1" stop-color="#a020ff"/></linearGradient></defs>
-      <path d="M50 7a43 43 0 1 0 29.5 74.2L96 98H72L60 85A43 43 0 1 1 85 50a34 34 0 0 1-9 23l12 12A50 50 0 1 0 50 7" fill="url(#qgrad2)"/>
-      <path d="M50 30l5.5 13.5L69 49l-13.5 5.5L50 68l-5.5-13.5L31 49l13.5-5.5z" fill="#fff"/>
-     </svg>
-     <h2>QuBix <span>AI</span></h2>
-    </div>
-   </div>
-   <div class="status" id="status">● Ready</div>
-  </header>
-
-  <section class="messages" id="messages">
-   <div class="welcome" id="welcome">
-    <h1>Hello, I'm <span>QuBix.</span></h1>
-    <p>Your intelligent AI assistant. Ask me anything, explore ideas, learn something new or get help with your work.</p>
-   </div>
-  </section>
-
-  <div class="composer-area">
-   <div class="qubix-tools">
-    <select id="assistantMode">
+ </section>
+ <div class="composer-area">
+  <div class="composer">
+   <textarea id="prompt" rows="1" placeholder="Message QuBix AI..." onkeydown="handleKey(event)"></textarea>
+   <div class="file-label" id="fileLabel"></div>
+   <div class="composer-tools">
+    <button class="tool" onclick="document.getElementById('fileInput').click()">📎 File</button>
+    <input id="fileInput" type="file" class="hidden" accept=".txt,.md,.csv,.json,.pdf,.html,.css,.js,.py" onchange="attachFile(event)">
+    <button class="tool" id="webButton" onclick="toggleWeb()">🌐 Web</button>
+    <button class="tool" onclick="voiceInput()">🎙 Voice</button>
+    <button class="tool" onclick="generateImage()">🎨 Image</button>
+    <select id="mode" class="tool" aria-label="Assistant mode">
      <option value="general">General</option>
      <option value="study">Study</option>
      <option value="coding">Coding</option>
      <option value="business">Business</option>
      <option value="writing">Writing</option>
     </select>
-
-    <label><input type="checkbox" id="webSearch"> Web search</label>
-    <label><input type="checkbox" id="speakReplies"> Speak replies</label>
-
-    <label>📎 Attach file
-     <input type="file" id="fileInput" accept=".txt,.md,.csv,.json,.pdf,.html,.css,.js,.py,.log">
-    </label>
-
-    <button type="button" onclick="generateImage()">🎨 Image</button>
+    <button class="send" onclick="sendMessage()">➤</button>
    </div>
-
-   <div id="fileStatus" class="file-status"></div>
-
-   <div class="composer">
-    <textarea id="prompt" placeholder="Message QuBix AI..." rows="1" onkeydown="handleKey(event)"></textarea>
-    <button class="action secondary" onclick="voiceInput()" title="Voice input">🎙</button>
-    <button class="action" onclick="sendMessage()" title="Send">➤</button>
-   </div>
-
-   <div class="hint">QuBix AI can make mistakes. Check important information.</div>
   </div>
- </main>
+  <div class="hint">QuBix AI can make mistakes. Check important information.</div>
+ </div>
+</main>
 </div>
 
 <div class="auth-wrap" id="authScreen">
  <div class="auth-card">
-  <div class="logo">
-   <svg class="q-logo" viewBox="0 0 100 100" role="img" aria-label="QuBix logo">
-    <defs><linearGradient id="qgrad3" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#00d9ff"/><stop offset=".55" stop-color="#167cff"/><stop offset="1" stop-color="#a020ff"/></linearGradient></defs>
-    <path d="M50 7a43 43 0 1 0 29.5 74.2L96 98H72L60 85A43 43 0 1 1 85 50a34 34 0 0 1-9 23l12 12A50 50 0 1 0 50 7" fill="url(#qgrad3)"/>
-    <path d="M50 30l5.5 13.5L69 49l-13.5 5.5L50 68l-5.5-13.5L31 49l13.5-5.5z" fill="#fff"/>
-   </svg>
-   <div>QuBix <span>AI</span></div>
-  </div>
-
+  <div class="logo">✦ <span>QuBix AI</span></div>
   <h1 id="authHeading">Welcome back</h1>
   <p id="authDescription">Log in to access your private chats.</p>
-  <input id="authEmail" type="email" placeholder="Email address" autocomplete="email">
-  <input id="authPassword" type="password" placeholder="Password (at least 6 characters)" autocomplete="current-password">
-  <button id="authSubmit" type="button" onclick="submitAuth()">Log in</button>
-  <button class="alt" id="authSwitch" type="button" onclick="switchAuth()">Create a new account</button>
-  <p class="auth-note" id="authNote" aria-live="polite"></p>
+  <input class="field" id="authEmail" type="email" placeholder="Email address">
+  <input class="field" id="authPassword" type="password" placeholder="Password (at least 6 characters)">
+  <button class="btn" id="authSubmit" onclick="submitAuth()">Log in</button>
+  <button class="btn secondary" id="authSwitch" onclick="switchAuth()">Create a new account</button>
+  <p class="auth-note" id="authNote"></p>
+ </div>
+</div>
+
+<div class="modal-wrap hidden" id="settingsModal">
+ <div class="modal">
+  <h2>⚙ Profile Settings</h2>
+  <label>Custom instructions</label>
+  <textarea id="customInstructions" placeholder="Tell QuBix how you want it to respond..."></textarea>
+  <label>Preferred language</label>
+  <select id="preferredLanguage">
+   <option value="auto">Automatic</option>
+   <option value="English">English</option>
+   <option value="Urdu">Urdu</option>
+   <option value="Roman Urdu">Roman Urdu</option>
+  </select>
+  <label>Response style</label>
+  <select id="responseStyle">
+   <option value="balanced">Balanced</option>
+   <option value="concise">Concise</option>
+   <option value="detailed">Detailed</option>
+   <option value="friendly">Friendly</option>
+   <option value="professional">Professional</option>
+  </select>
+  <div class="modal-actions">
+   <button class="btn" onclick="saveSettings()">Save settings</button>
+   <button class="btn secondary" onclick="closeModal('settingsModal')">Close</button>
+  </div>
+  <p id="settingsNote" class="auth-note"></p>
+ </div>
+</div>
+
+<div class="modal-wrap hidden" id="memoryModal">
+ <div class="modal">
+  <h2>🧠 Memory Manager</h2>
+  <p style="color:var(--muted);font-size:13px;margin-bottom:12px">These memories are private to your account.</p>
+  <div class="memory-list" id="memoryList">Loading memories...</div>
+  <label>Add a memory</label>
+  <input id="newMemory" placeholder="Example: I prefer short Roman Urdu replies">
+  <div class="modal-actions">
+   <button class="btn" onclick="addMemory()">Save memory</button>
+   <button class="btn danger" onclick="clearMemories()">Clear all</button>
+   <button class="btn secondary" onclick="closeModal('memoryModal')">Close</button>
+  </div>
+  <p id="memoryNote" class="auth-note"></p>
  </div>
 </div>
 
 <script>
 "use strict";
 
-const SUPABASE_URL="https://tehtdnaziyjwuacfxzsk.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY="sb_publishable_k50vs5oP1POySSKevkaSYw_fgPn7O_T";
+const SUPABASE_URL = "https://tehtdnaziyjwuacfxzsk.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_k50vs5oP1POySSKevkaSYw_fgPn7O_T";
 
-let supabaseClient=null;
-let currentUser=null;
-let chats=[];
-let currentChat=null;
-let busy=false;
-let authMode="login";
-let authListenerStarted=false;
-let attachedText="";
-let attachedName="";
+let sb, user, chats=[], currentChat=null, busy=false;
+let authMode="login", webSearch=false, attachedText="", attachedName="";
+let profile={custom_instructions:"",preferred_language:"auto",response_style:"balanced"};
 
-const el=id=>document.getElementById(id);
+const $ = id => document.getElementById(id);
+const API = "/api/chat";
 
-function setNote(message){
- el("authNote").textContent=message;
-}
-
-function setStatus(message){
- el("status").textContent="● "+message;
-}
-
+function note(id, text){ $(id).textContent=text; }
+function status(text){ $("status").textContent="● "+text; }
 function welcomeHTML(){
  return `<div class="welcome" id="welcome"><h1>Hello, I'm <span>QuBix.</span></h1><p>Your intelligent AI assistant. What would you like to explore today?</p></div>`;
 }
+function authToken(){
+ return sb.auth.getSession().then(({data,error})=>{
+  if(error)throw error;
+  if(!data.session?.access_token)throw Error("Session expired. Please log in again.");
+  return data.session.access_token;
+ });
+}
+async function api(body){
+ const token=await authToken();
+ const r=await fetch(API,{
+  method:"POST",
+  headers:{"Content-Type":"application/json","Authorization":"Bearer "+token},
+  body:JSON.stringify(body)
+ });
+ let data={};
+ try{data=await r.json()}catch(_){}
+ if(!r.ok)throw Error(data.error||"Request failed.");
+ return data;
+}
 
+/* AUTH */
 function switchAuth(){
  authMode=authMode==="login"?"signup":"login";
- el("authHeading").textContent=authMode==="login"?"Welcome back":"Create your account";
- el("authDescription").textContent=authMode==="login"?"Log in to access your private chats.":"Sign up to save your chats privately.";
- el("authSubmit").textContent=authMode==="login"?"Log in":"Create account";
- el("authSwitch").textContent=authMode==="login"?"Create a new account":"I already have an account";
- el("authPassword").value="";
- setNote("");
+ $("authHeading").textContent=authMode==="login"?"Welcome back":"Create your account";
+ $("authDescription").textContent=authMode==="login"?"Log in to access your private chats.":"Sign up to save your chats privately.";
+ $("authSubmit").textContent=authMode==="login"?"Log in":"Create account";
+ $("authSwitch").textContent=authMode==="login"?"Create a new account":"I already have an account";
+ note("authNote","");
 }
-
 async function submitAuth(){
- if(!supabaseClient){
-  setNote("Supabase connection is not ready. Refresh the page.");
-  return;
- }
-
- const email=el("authEmail").value.trim();
- const password=el("authPassword").value;
-
- if(!email||!password){
-  setNote("Please enter your email and password.");
-  return;
- }
-
- if(password.length<6){
-  setNote("Password must be at least 6 characters.");
-  return;
- }
-
- const button=el("authSubmit");
- button.disabled=true;
- button.textContent="Please wait...";
- setNote("");
-
+ const email=$("authEmail").value.trim(),password=$("authPassword").value;
+ if(!email||!password)return note("authNote","Enter email and password.");
+ if(password.length<6)return note("authNote","Password must be at least 6 characters.");
+ const b=$("authSubmit");b.disabled=true;b.textContent="Please wait...";
  try{
   if(authMode==="signup"){
-   const {data,error}=await supabaseClient.auth.signUp({email,password});
+   const {data,error}=await sb.auth.signUp({email,password});
    if(error)throw error;
-   setNote(data.session?"Account created. Signing you in...":"Account created! Check your email to confirm, then log in.");
+   note("authNote",data.session?"Account created.":"Check your email to confirm your account, then log in.");
   }else{
-   const {error}=await supabaseClient.auth.signInWithPassword({email,password});
+   const {error}=await sb.auth.signInWithPassword({email,password});
    if(error)throw error;
-   setNote("Login successful!");
   }
- }catch(error){
-  console.error(error);
-  setNote(error.message||"Authentication failed");
- }finally{
-  button.disabled=false;
-  button.textContent=authMode==="login"?"Log in":"Create account";
- }
+ }catch(e){note("authNote",e.message)}
+ finally{b.disabled=false;b.textContent=authMode==="login"?"Log in":"Create account"}
+}
+function showApp(u){
+ user=u;
+ $("authScreen").classList.add("hidden");
+ $("accountEmail").textContent=u.email||"Signed in";
+ loadChats();
+ loadSettings();
+}
+async function logout(){
+ await sb.auth.signOut();
+ user=null;chats=[];currentChat=null;
+ $("authScreen").classList.remove("hidden");
+ $("messages").innerHTML=welcomeHTML();
+ $("history").innerHTML="";
 }
 
-function showApp(user){
- currentUser=user;
- el("authScreen").classList.add("hidden");
- el("accountEmail").textContent=user.email||"Signed in";
+/* INIT */
+async function init(){
+ if(localStorage.getItem("qubix_theme")==="light")document.body.classList.add("light");
+ if(!window.supabase){note("authNote","Supabase library failed to load. Refresh the page.");return}
+ try{
+  sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
+  const {data,error}=await sb.auth.getSession();if(error)throw error;
+  if(data.session?.user)showApp(data.session.user);
+  sb.auth.onAuthStateChange((event,session)=>{
+   if(session?.user)showApp(session.user);
+   else if(event==="SIGNED_OUT")$("authScreen").classList.remove("hidden");
+  });
+ }catch(e){note("authNote",e.message)}
+}
+
+/* CHATS */
+async function loadChats(){
+ if(!user)return;
+ const {data,error}=await sb.from("chats").select("id,title,created_at,updated_at")
+  .eq("user_id",user.id).order("updated_at",{ascending:false});
+ if(error){console.error(error);return}
+ chats=data||[];renderHistory();
+}
+function renderHistory(){
+ const box=$("history"),q=$("historySearch").value.toLowerCase();
+ box.innerHTML="";
+ chats.filter(c=>(c.title||"").toLowerCase().includes(q)).forEach(chat=>{
+  const row=document.createElement("div");
+  row.className="history-item"+(currentChat?.id===chat.id?" active":"");
+  const open=document.createElement("button");
+  open.className="chat-open";open.textContent=chat.title||"Untitled chat";
+  open.onclick=()=>openChat(chat.id);
+  const actions=document.createElement("div");actions.className="chat-actions";
+  const rename=document.createElement("button");rename.textContent="✎";rename.title="Rename";
+  rename.onclick=()=>renameChat(chat.id);
+  const del=document.createElement("button");del.textContent="×";del.className="delete";del.title="Delete";
+  del.onclick=()=>deleteChat(chat.id);
+  actions.append(rename,del);row.append(open,actions);box.append(row);
+ });
+ if(!box.children.length){
+  const empty=document.createElement("div");empty.className="file-label";
+  empty.textContent="No chats found.";box.append(empty);
+ }
+}
+async function renameChat(id){
+ const c=chats.find(x=>x.id===id);if(!c)return;
+ const title=prompt("New chat name:",c.title||"");if(title===null)return;
+ if(!title.trim())return alert("Name cannot be empty.");
+ const {error}=await sb.from("chats").update({title:title.trim()})
+  .eq("id",id).eq("user_id",user.id);
+ if(error)return alert(error.message);
+ if(currentChat?.id===id)currentChat={...currentChat,title:title.trim()};
  loadChats();
 }
-
-async function logout(){
- if(!supabaseClient)return;
- const {error}=await supabaseClient.auth.signOut();
- if(error){
-  alert(error.message);
-  return;
- }
- currentUser=null;
- chats=[];
- currentChat=null;
- el("history").innerHTML="";
- el("messages").innerHTML=welcomeHTML();
- el("authScreen").classList.remove("hidden");
- setNote("");
-}
-
-async function init(){
- if(localStorage.getItem("qubix_theme")==="light"){
-  document.body.classList.add("light");
- }
-
- if(!window.supabase||!window.supabase.createClient){
-  setNote("Supabase library could not load. Check your internet connection and refresh.");
-  return;
- }
-
- try{
-  supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
-
-  const {data,error}=await supabaseClient.auth.getSession();
-  if(error)throw error;
-
-  if(data.session?.user)showApp(data.session.user);
-
-  if(!authListenerStarted){
-   authListenerStarted=true;
-   supabaseClient.auth.onAuthStateChange((event,session)=>{
-    if(session?.user){
-     showApp(session.user);
-    }else if(event==="SIGNED_OUT"){
-     currentUser=null;
-     chats=[];
-     currentChat=null;
-     el("authScreen").classList.remove("hidden");
-    }
-   });
-  }
- }catch(error){
-  console.error(error);
-  setNote("Connection error: "+error.message);
- }
-}
-
-async function loadChats(){
- if(!currentUser)return;
-
- const {data,error}=await supabaseClient
-  .from("chats")
-  .select("id,title,created_at,updated_at")
-  .eq("user_id",currentUser.id)
-  .order("updated_at",{ascending:false});
-
- if(error){
-  console.error(error);
-  alert("Could not load chats: "+error.message);
-  return;
- }
-
- chats=data||[];
- renderHistory();
-}
-
-function renderHistory(){
- const box=el("history");
- const query=(el("historySearch")?.value||"").trim().toLowerCase();
- box.innerHTML="";
-
- const visible=chats.filter(chat=>(chat.title||"").toLowerCase().includes(query));
-
- visible.forEach(chat=>{
-  const item=document.createElement("div");
-  item.className="history-item"+(currentChat?.id===chat.id?" active":"");
-
-  const open=document.createElement("button");
-  open.className="chat-open";
-  open.textContent=chat.title||"Untitled chat";
-  open.title=chat.title||"";
-  open.onclick=()=>openChat(chat.id);
-
-  const actions=document.createElement("div");
-  actions.className="chat-actions";
-
-  const rename=document.createElement("button");
-  rename.type="button";
-  rename.textContent="✎";
-  rename.title="Rename chat";
-  rename.setAttribute("aria-label","Rename chat");
-  rename.onclick=()=>renameChat(chat.id);
-
-  const del=document.createElement("button");
-  del.type="button";
-  del.className="delete";
-  del.textContent="×";
-  del.title="Delete chat";
-  del.setAttribute("aria-label","Delete chat");
-  del.onclick=()=>deleteChat(chat.id);
-
-  actions.append(rename,del);
-  item.append(open,actions);
-  box.appendChild(item);
- });
-
- if(!visible.length){
-  const empty=document.createElement("div");
-  empty.style.cssText="color:var(--muted);font-size:13px;padding:12px";
-  empty.textContent=query?"No matching chats.":"No chats yet.";
-  box.appendChild(empty);
- }
-}
-
-async function renameChat(id){
- const chat=chats.find(c=>c.id===id);
- if(!chat||!currentUser)return;
-
- const title=prompt("Enter a new chat name:",chat.title||"");
- if(title===null)return;
-
- const clean=title.trim();
- if(!clean){
-  alert("Chat name cannot be empty.");
-  return;
- }
-
- const {error}=await supabaseClient
-  .from("chats")
-  .update({title:clean})
-  .eq("id",id)
-  .eq("user_id",currentUser.id);
-
- if(error){
-  alert("Could not rename chat: "+error.message);
-  return;
- }
-
- if(currentChat?.id===id)currentChat={...currentChat,title:clean};
- await loadChats();
-}
-
 async function deleteChat(id){
- const chat=chats.find(c=>c.id===id);
- if(!chat||!currentUser)return;
-
- if(!confirm(`Delete "${chat.title}" and all its messages? This cannot be undone.`))return;
-
- const {error}=await supabaseClient
-  .from("chats")
-  .delete()
-  .eq("id",id)
-  .eq("user_id",currentUser.id);
-
- if(error){
-  alert("Could not delete chat: "+error.message);
-  return;
- }
-
- if(currentChat?.id===id){
-  currentChat=null;
-  el("messages").innerHTML=welcomeHTML();
- }
-
- await loadChats();
+ const c=chats.find(x=>x.id===id);if(!c)return;
+ if(!confirm(`Delete "${c.title}" and its messages?`))return;
+ const {error}=await sb.from("chats").delete().eq("id",id).eq("user_id",user.id);
+ if(error)return alert(error.message);
+ if(currentChat?.id===id)newChat();
+ loadChats();
 }
-
 function newChat(){
- currentChat=null;
- el("messages").innerHTML=welcomeHTML();
- renderHistory();
- closeSidebar();
- el("prompt").focus();
+ currentChat=null;$("messages").innerHTML=welcomeHTML();
+ renderHistory();closeSidebar();$("prompt").focus();
 }
-
 async function openChat(id){
- const chat=chats.find(item=>item.id===id);
- if(!chat)return;
-
- currentChat=chat;
- renderHistory();
- closeSidebar();
-
- const {data,error}=await supabaseClient
-  .from("messages")
-  .select("id,role,content,created_at")
-  .eq("chat_id",id)
-  .order("created_at",{ascending:true});
-
- if(error){
-  alert("Could not load messages: "+error.message);
-  return;
- }
-
- const box=el("messages");
- box.innerHTML="";
-
- if(!data||!data.length){
-  box.innerHTML=welcomeHTML();
-  return;
- }
-
- data.forEach(message=>addBubble(message.content,message.role));
+ const c=chats.find(x=>x.id===id);if(!c)return;
+ currentChat=c;renderHistory();closeSidebar();
+ const {data,error}=await sb.from("messages").select("role,content")
+  .eq("chat_id",id).order("created_at",{ascending:true});
+ if(error)return alert(error.message);
+ $("messages").innerHTML="";
+ if(!data?.length){$("messages").innerHTML=welcomeHTML();return}
+ data.forEach(m=>addBubble(m.content,m.role));
 }
-
-function renderMarkdown(target,text){
- if(window.marked&&window.DOMPurify){
-  try{
-   target.innerHTML=window.DOMPurify.sanitize(
-    window.marked.parse(text,{breaks:true,gfm:true})
-   );
-   return;
-  }catch(error){
-   console.warn("Markdown rendering fallback:",error);
-  }
- }
- target.textContent=text;
-}
-
-function addBubble(text,role){
- const box=el("messages");
- const welcome=el("welcome");
- if(welcome)welcome.remove();
-
- const row=document.createElement("div");
- row.className="message "+role;
-
- const bubble=document.createElement("div");
- bubble.className="bubble";
-
- if(role==="assistant")renderMarkdown(bubble,text);
- else bubble.textContent=text;
-
- row.appendChild(bubble);
- box.appendChild(row);
- box.scrollTop=box.scrollHeight;
- return row;
-}
-
-function handleKey(event){
- if(event.key==="Enter"&&!event.shiftKey){
-  event.preventDefault();
-  sendMessage();
- }
-}
-
 async function saveMessage(chatId,role,content){
- const {error}=await supabaseClient
-  .from("messages")
-  .insert({
-   chat_id:chatId,
-   user_id:currentUser.id,
-   role,
-   content
-  });
-
+ const {error}=await sb.from("messages").insert({
+  chat_id:chatId,user_id:user.id,role,content
+ });
  if(error)throw error;
 }
 
+/* MESSAGE DISPLAY */
+function renderMarkdown(target,text){
+ if(window.marked&&window.DOMPurify){
+  target.innerHTML=window.DOMPurify.sanitize(window.marked.parse(text,{breaks:true,gfm:true}));
+ }else target.textContent=text;
+}
+function addBubble(text,role){
+ const welcome=$("welcome");if(welcome)welcome.remove();
+ const row=document.createElement("div");row.className="message "+role;
+ const bubble=document.createElement("div");bubble.className="bubble";
+ if(role==="assistant")renderMarkdown(bubble,text);else bubble.textContent=text;
+ row.append(bubble);$("messages").append(row);
+ $("messages").scrollTop=$("messages").scrollHeight;
+ return row;
+}
+function addImageToBubble(row,src){
+ const img=document.createElement("img");img.src=src;img.className="image-result";img.alt="Generated image";
+ row.querySelector(".bubble").append(img);
+}
+function handleKey(e){
+ if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMessage()}
+}
+
+/* SSE STREAMING */
+async function readStream(response,onToken){
+ if(!response.ok){
+  let d={};try{d=await response.json()}catch(_){}
+  throw Error(d.error||"AI request failed.");
+ }
+ if(!response.body)throw Error("Streaming response unavailable.");
+ const reader=response.body.getReader(),decoder=new TextDecoder();
+ let buffer="",full="";
+ while(true){
+  const {value,done}=await reader.read();
+  if(done)break;
+  buffer+=decoder.decode(value,{stream:true});
+  const parts=buffer.split("\n\n");buffer=parts.pop()||"";
+  for(const part of parts){
+   const line=part.split("\n").find(x=>x.startsWith("data:"));
+   if(!line)continue;
+   const raw=line.slice(5).trim();if(!raw)continue;
+   let data;try{data=JSON.parse(raw)}catch(_){continue}
+   if(data.error)throw Error(data.error);
+   if(data.token){full+=data.token;onToken(full)}
+  }
+ }
+ if(buffer.trim()){
+  const line=buffer.split("\n").find(x=>x.startsWith("data:"));
+  if(line){try{const d=JSON.parse(line.slice(5).trim());if(d.token){full+=d.token;onToken(full)}if(d.error)throw Error(d.error)}catch(e){if(e.message!=="Unexpected end of JSON input")throw e}}
+ }
+ return full;
+}
+
 async function sendMessage(){
- const input=el("prompt");
- const message=input.value.trim();
-
- if(!message||busy||!currentUser)return;
-
- input.value="";
- busy=true;
- setStatus("Thinking...");
+ const input=$("prompt"),message=input.value.trim();
+ if(!message||busy||!user)return;
+ input.value="";busy=true;status("Thinking...");
  addBubble(message,"user");
-
+ let loading;
  try{
   if(!currentChat){
-   const {data,error}=await supabaseClient
-    .from("chats")
-    .insert({
-     user_id:currentUser.id,
-     title:message.slice(0,35)
-    })
-    .select()
-    .single();
-
+   const {data,error}=await sb.from("chats").insert({
+    user_id:user.id,title:message.slice(0,45)
+   }).select().single();
    if(error)throw error;
-
-   currentChat=data;
-   chats.unshift(data);
-   renderHistory();
+   currentChat=data;chats.unshift(data);renderHistory();
   }else{
-   const {error}=await supabaseClient
-    .from("chats")
-    .update({updated_at:new Date().toISOString()})
-    .eq("id",currentChat.id)
-    .eq("user_id",currentUser.id);
-
-   if(error)throw error;
+   await sb.from("chats").update({updated_at:new Date().toISOString()})
+    .eq("id",currentChat.id).eq("user_id",user.id);
   }
 
   await saveMessage(currentChat.id,"user",message);
+  loading=addBubble("QuBix is thinking...","assistant");
 
-  const loading=addBubble("QuBix is thinking...","assistant");
+  const {data:history,error}=await sb.from("messages")
+   .select("role,content").eq("chat_id",currentChat.id)
+   .order("created_at",{ascending:true});
+  if(error)throw error;
 
-  const {data:{session},error:sessionError}=await supabaseClient.auth.getSession();
-
-  if(sessionError)throw sessionError;
-  if(!session?.access_token)throw new Error("Your session expired. Please log in again.");
-
-  const {data:historyData,error:historyError}=await supabaseClient
-   .from("messages")
-   .select("role,content")
-   .eq("chat_id",currentChat.id)
-   .order("created_at",{ascending:true})
-   .limit(16);
-
-  if(historyError)throw historyError;
-
-  const history=(historyData||[]).slice(0,-1);
-
-  const response=await fetch("/api/chat",{
+  const token=await authToken();
+  const response=await fetch(API,{
    method:"POST",
-   headers:{
-    "Content-Type":"application/json",
-    "Authorization":`Bearer ${session.access_token}`
-   },
+   headers:{"Content-Type":"application/json","Authorization":"Bearer "+token},
    body:JSON.stringify({
     message,
-    mode:el("assistantMode")?.value||"general",
-    webSearch:!!el("webSearch")?.checked,
+    history:(history||[]).slice(0,-1),
+    mode:$("mode").value,
+    webSearch,
     fileText:attachedText,
     fileName:attachedName,
-    history
+    profile
    })
   });
 
-  let data={};
-  try{data=await response.json()}catch(_){}
-
-  if(!response.ok)throw new Error(data.error||"AI request failed.");
-
-  const answer=data.reply||"No answer generated.";
-  renderMarkdown(loading.querySelector(".bubble"),answer);
-
-  if(el("speakReplies")?.checked)speakReply(answer);
-
-  await saveMessage(currentChat.id,"assistant",answer);
+  const bubble=loading.querySelector(".bubble");
+  bubble.textContent="";
+  const reply=await readStream(response,text=>renderMarkdown(bubble,text));
+  if(!reply.trim())throw Error("No answer generated.");
+  await saveMessage(currentChat.id,"assistant",reply);
   await loadChats();
-
-  attachedText="";
-  attachedName="";
-  if(el("fileStatus"))el("fileStatus").textContent="";
-  if(el("fileInput"))el("fileInput").value="";
-
- }catch(error){
-  console.error("Chat error:",error);
-  addBubble("Error: "+error.message,"assistant");
+  attachedText="";attachedName="";$("fileLabel").textContent="";
+  $("fileInput").value="";
+ }catch(e){
+  console.error(e);
+  if(loading)loading.querySelector(".bubble").textContent="Error: "+e.message;
+  else addBubble("Error: "+e.message,"assistant");
  }finally{
-  busy=false;
-  setStatus("Ready");
+  busy=false;status("Ready");
  }
 }
 
-function toggleTheme(){
- document.body.classList.toggle("light");
- localStorage.setItem(
-  "qubix_theme",
-  document.body.classList.contains("light")?"light":"dark"
- );
+/* WEB SEARCH */
+function toggleWeb(){
+ webSearch=!webSearch;
+ $("webButton").classList.toggle("active",webSearch);
 }
 
-function voiceInput(){
- const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-
- if(!SR){
-  alert("Voice input needs Chrome or Edge.");
-  return;
- }
-
- const r=new SR();
- r.lang="en-US";
- r.onresult=e=>{
-  el("prompt").value=e.results[0][0].transcript;
- };
- r.onerror=e=>alert("Voice error: "+e.error);
- r.start();
-}
-
-function speakReply(text){
- if(!window.speechSynthesis){
-  alert("Spoken replies are not supported here.");
-  return;
- }
-
- speechSynthesis.cancel();
-
- const clean=String(text)
-  .replace(/```[\s\S]*?```/g," code omitted ")
-  .slice(0,4000);
-
- const u=new SpeechSynthesisUtterance(clean);
- u.lang=/[\u0600-\u06FF]/.test(u.text)?"ur-PK":"en-US";
- speechSynthesis.speak(u);
-}
-
-async function readSelectedFile(file){
- if(!file)return;
-
- if(file.size>5*1024*1024){
-  alert("File limit is 5 MB.");
-  return;
- }
-
- el("fileStatus").textContent="Reading "+file.name+"...";
-
+/* FILES */
+async function attachFile(event){
+ const file=event.target.files[0];if(!file)return;
+ $("fileLabel").textContent="Reading "+file.name+"...";
  try{
   let text="";
-
-  if(file.name.toLowerCase().endsWith(".pdf")){
-   if(!window.pdfjsLib){
-    await new Promise((resolve,reject)=>{
-     const script=document.createElement("script");
-     script.src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
-     script.onload=resolve;
-     script.onerror=reject;
-     document.head.appendChild(script);
-    });
-   }
-
-   pdfjsLib.GlobalWorkerOptions.workerSrc=
-    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-
-   const pdf=await pdfjsLib.getDocument({
-    data:await file.arrayBuffer()
-   }).promise;
-
-   const parts=[];
-
-   for(let n=1;n<=Math.min(pdf.numPages,30);n++){
-    const page=await pdf.getPage(n);
+  if(file.type==="application/pdf"||file.name.toLowerCase().endsWith(".pdf")){
+   if(!window.pdfjsLib)throw Error("PDF reader failed to load.");
+   pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+   const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
+   for(let i=1;i<=Math.min(pdf.numPages,30);i++){
+    const page=await pdf.getPage(i);
     const content=await page.getTextContent();
-    parts.push(content.items.map(x=>x.str).join(" "));
+    text+=content.items.map(x=>x.str).join(" ")+"\n";
    }
-
-   text=parts.join("\n");
   }else{
    text=await file.text();
   }
-
-  attachedText=text.slice(0,18000);
-  attachedName=file.name;
-  el("fileStatus").textContent="Attached: "+file.name;
-
- }catch(error){
-  attachedText="";
-  attachedName="";
-  el("fileStatus").textContent="File read error: "+error.message;
+  attachedText=text.slice(0,18000);attachedName=file.name;
+  $("fileLabel").textContent="Attached: "+file.name;
+ }catch(e){
+  $("fileLabel").textContent="File error: "+e.message;
  }
 }
 
+/* IMAGE GENERATION */
 async function generateImage(){
- const prompt=el("prompt").value.trim();
-
- if(!prompt){
-  alert("Image prompt message box mein likhein.");
-  return;
- }
-
- if(busy||!currentUser)return;
-
- busy=true;
- setStatus("Generating image...");
-
+ const prompt=$("prompt").value.trim();
+ if(!prompt)return alert("Pehle image ka prompt likho.");
+ if(busy)return;
+ busy=true;status("Creating image...");
+ const row=addBubble("Create an image: "+prompt,"user");
+ const loading=addBubble("Generating image. This may take a little while...","assistant");
+ $("prompt").value="";
  try{
-  const {data:{session}}=await supabaseClient.auth.getSession();
-
-  if(!session?.access_token){
-   throw new Error("Please log in again.");
-  }
-
-  const response=await fetch("/api/chat",{
-   method:"POST",
-   headers:{
-    "Content-Type":"application/json",
-    "Authorization":"Bearer "+session.access_token
-   },
-   body:JSON.stringify({
-    action:"generate_image",
-    message:prompt
-   })
-  });
-
-  const data=await response.json();
-
-  if(!response.ok)throw new Error(data.error||"Image generation failed.");
-
-  const row=addBubble(data.reply||"Image generated.","assistant");
-
-  if(data.image){
-   const img=document.createElement("img");
-   img.src=data.image;
-   img.alt=prompt;
-   img.style="max-width:100%;border-radius:12px;margin-top:10px";
-   row.querySelector(".bubble").appendChild(img);
-  }
-
-  el("prompt").value="";
-
- }catch(error){
-  addBubble("Image error: "+error.message,"assistant");
- }finally{
-  busy=false;
-  setStatus("Ready");
- }
+  const data=await api({action:"generate_image",message:prompt});
+  loading.querySelector(".bubble").textContent=data.reply||"Image generated.";
+  if(data.image)addImageToBubble(loading,data.image);
+ }catch(e){loading.querySelector(".bubble").textContent="Image error: "+e.message}
+ finally{busy=false;status("Ready")}
 }
 
+/* VOICE */
+function voiceInput(){
+ const Speech=window.SpeechRecognition||window.webkitSpeechRecognition;
+ if(!Speech)return alert("Voice input is not supported in this browser.");
+ const rec=new Speech();rec.lang="en-US";rec.interimResults=false;
+ rec.onresult=e=>{$("prompt").value=e.results[0][0].transcript};
+ rec.onerror=e=>alert("Voice error: "+e.error);
+ rec.start();
+}
+
+/* SETTINGS */
+async function loadSettings(){
+ if(!user)return;
+ const {data,error}=await sb.from("qubix_profiles").select("*")
+  .eq("user_id",user.id).maybeSingle();
+ if(error){console.warn("Profile load:",error.message);return}
+ if(data){
+  profile={
+   custom_instructions:data.custom_instructions||"",
+   preferred_language:data.preferred_language||"auto",
+   response_style:data.response_style||"balanced"
+  };
+ }
+}
+function openSettings(){
+ $("customInstructions").value=profile.custom_instructions;
+ $("preferredLanguage").value=profile.preferred_language;
+ $("responseStyle").value=profile.response_style;
+ note("settingsNote","");
+ $("settingsModal").classList.remove("hidden");
+}
+async function saveSettings(){
+ profile={
+  custom_instructions:$("customInstructions").value.trim(),
+  preferred_language:$("preferredLanguage").value,
+  response_style:$("responseStyle").value
+ };
+ const {error}=await sb.from("qubix_profiles").upsert({
+  user_id:user.id,...profile,updated_at:new Date().toISOString()
+ },{onConflict:"user_id"});
+ if(error){note("settingsNote","Save failed: "+error.message);return}
+ note("settingsNote","Settings saved successfully.");
+}
+
+/* MEMORY MANAGER */
+async function openMemories(){
+ $("memoryModal").classList.remove("hidden");
+ note("memoryNote","");
+ await loadMemories();
+}
+async function loadMemories(){
+ const box=$("memoryList");box.textContent="Loading...";
+ try{
+  const data=await api({action:"memory_list"});
+  box.innerHTML="";
+  const list=data.memories||[];
+  if(!list.length){box.textContent="No saved memories yet.";return}
+  list.forEach(m=>{
+   const row=document.createElement("div");row.className="memory-item";
+   const txt=document.createElement("div");txt.className="memory-text";
+   txt.textContent=m.memory;
+   const del=document.createElement("button");del.textContent="Delete";del.title="Delete memory";
+   del.onclick=()=>removeMemory(m.id);
+   row.append(txt,del);box.append(row);
+  });
+ }catch(e){box.textContent="Could not load memories: "+e.message}
+}
+async function addMemory(){
+ const value=$("newMemory").value.trim();
+ if(!value)return note("memoryNote","Write a memory first.");
+ try{
+  await api({action:"memory_save",memory:value});
+  $("newMemory").value="";
+  note("memoryNote","Memory saved.");
+  await loadMemories();
+ }catch(e){note("memoryNote","Save failed: "+e.message)}
+}
+async function removeMemory(id){
+ if(!confirm("Delete this memory?"))return;
+ try{await api({action:"memory_delete",id});await loadMemories()}
+ catch(e){note("memoryNote","Delete failed: "+e.message)}
+}
+async function clearMemories(){
+ if(!confirm("Delete ALL your saved memories? This cannot be undone."))return;
+ try{
+  await api({action:"memory_clear"});
+  note("memoryNote","All memories cleared.");
+  await loadMemories();
+ }catch(e){note("memoryNote","Could not clear memories: "+e.message)}
+}
+
+/* UI */
+function closeModal(id){$(id).classList.add("hidden")}
+function toggleTheme(){
+ document.body.classList.toggle("light");
+ localStorage.setItem("qubix_theme",document.body.classList.contains("light")?"light":"dark");
+}
 function toggleSidebar(){
- el("sidebar").classList.toggle("open");
- el("overlay").classList.toggle("show");
+ $("sidebar").classList.toggle("open");
+ $("overlay").classList.toggle("show");
 }
-
 function closeSidebar(){
- el("sidebar").classList.remove("open");
- el("overlay").classList.remove("show");
+ $("sidebar").classList.remove("open");
+ $("overlay").classList.remove("show");
 }
-
-document.addEventListener("DOMContentLoaded",()=>{
- const fileInput=el("fileInput");
-
- if(fileInput){
-  fileInput.addEventListener("change",()=>{
-   readSelectedFile(fileInput.files[0]);
-  });
- }
-
- init();
-});
+document.addEventListener("DOMContentLoaded",init);
 </script>
 </body>
 </html>
