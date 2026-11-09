@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -84,12 +85,18 @@ button{cursor:pointer}
 .memory-text{flex:1;overflow-wrap:anywhere;font-size:13px}
 .memory-item button{border:0;background:transparent;color:var(--danger);padding:7px}
 .file-label{font-size:12px;color:var(--muted);padding:5px}
+
+/* Mobile overlay fix */
+.overlay{display:none;position:fixed;inset:0;background:#0008;z-index:4}
+.overlay.show{display:block}
+
 @media(max-width:700px){
  .sidebar{position:fixed;left:0;top:0;bottom:0;width:min(300px,85vw);transform:translateX(-105%);transition:transform .2s}
  .sidebar.open{transform:translateX(0)}
- .overlay.show{display:block;position:fixed;inset:0;background:#0008;z-index:4}
- .menu-btn{display:block}.topbar{padding:0 12px}
- .messages{padding:18px 12px}.composer-area{padding:10px}
+ .menu-btn{display:block}
+ .topbar{padding:0 12px}
+ .messages{padding:18px 12px}
+ .composer-area{padding:10px}
  .welcome h1{font-size:29px}
 }
 </style>
@@ -220,18 +227,20 @@ let profile={custom_instructions:"",preferred_language:"auto",response_style:"ba
 const $ = id => document.getElementById(id);
 const API = "/api/chat";
 
-function note(id, text){ $(id).textContent=text; }
-function status(text){ $("status").textContent="● "+text; }
+function note(id,text){$(id).textContent=text}
+function status(text){$("status").textContent="● "+text}
+
 function welcomeHTML(){
  return `<div class="welcome" id="welcome"><h1>Hello, I'm <span>QuBix.</span></h1><p>Your intelligent AI assistant. What would you like to explore today?</p></div>`;
 }
-function authToken(){
- return sb.auth.getSession().then(({data,error})=>{
-  if(error)throw error;
-  if(!data.session?.access_token)throw Error("Session expired. Please log in again.");
-  return data.session.access_token;
- });
+
+async function authToken(){
+ const {data,error}=await sb.auth.getSession();
+ if(error)throw error;
+ if(!data.session?.access_token)throw Error("Session expired. Please log in again.");
+ return data.session.access_token;
 }
+
 async function api(body){
  const token=await authToken();
  const r=await fetch(API,{
@@ -246,6 +255,7 @@ async function api(body){
 }
 
 /* AUTH */
+
 function switchAuth(){
  authMode=authMode==="login"?"signup":"login";
  $("authHeading").textContent=authMode==="login"?"Welcome back":"Create your account";
@@ -254,11 +264,18 @@ function switchAuth(){
  $("authSwitch").textContent=authMode==="login"?"Create a new account":"I already have an account";
  note("authNote","");
 }
+
 async function submitAuth(){
- const email=$("authEmail").value.trim(),password=$("authPassword").value;
+ const email=$("authEmail").value.trim();
+ const password=$("authPassword").value;
+
  if(!email||!password)return note("authNote","Enter email and password.");
  if(password.length<6)return note("authNote","Password must be at least 6 characters.");
- const b=$("authSubmit");b.disabled=true;b.textContent="Please wait...";
+
+ const b=$("authSubmit");
+ b.disabled=true;
+ b.textContent="Please wait...";
+
  try{
   if(authMode==="signup"){
    const {data,error}=await sb.auth.signUp({email,password});
@@ -268,9 +285,14 @@ async function submitAuth(){
    const {error}=await sb.auth.signInWithPassword({email,password});
    if(error)throw error;
   }
- }catch(e){note("authNote",e.message)}
- finally{b.disabled=false;b.textContent=authMode==="login"?"Log in":"Create account"}
+ }catch(e){
+  note("authNote",e.message);
+ }finally{
+  b.disabled=false;
+  b.textContent=authMode==="login"?"Log in":"Create account";
+ }
 }
+
 function showApp(u){
  user=u;
  $("authScreen").classList.add("hidden");
@@ -278,180 +300,331 @@ function showApp(u){
  loadChats();
  loadSettings();
 }
+
 async function logout(){
  await sb.auth.signOut();
- user=null;chats=[];currentChat=null;
+ user=null;
+ chats=[];
+ currentChat=null;
  $("authScreen").classList.remove("hidden");
  $("messages").innerHTML=welcomeHTML();
  $("history").innerHTML="";
 }
 
 /* INIT */
+
 async function init(){
  if(localStorage.getItem("qubix_theme")==="light")document.body.classList.add("light");
- if(!window.supabase){note("authNote","Supabase library failed to load. Refresh the page.");return}
+
+ if(!window.supabase){
+  note("authNote","Supabase library failed to load. Refresh the page.");
+  return;
+ }
+
  try{
   sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
-  const {data,error}=await sb.auth.getSession();if(error)throw error;
+  const {data,error}=await sb.auth.getSession();
+  if(error)throw error;
   if(data.session?.user)showApp(data.session.user);
+
   sb.auth.onAuthStateChange((event,session)=>{
    if(session?.user)showApp(session.user);
    else if(event==="SIGNED_OUT")$("authScreen").classList.remove("hidden");
   });
- }catch(e){note("authNote",e.message)}
+ }catch(e){
+  note("authNote",e.message);
+ }
 }
 
 /* CHATS */
+
 async function loadChats(){
  if(!user)return;
- const {data,error}=await sb.from("chats").select("id,title,created_at,updated_at")
-  .eq("user_id",user.id).order("updated_at",{ascending:false});
+
+ const {data,error}=await sb.from("chats")
+  .select("id,title,created_at,updated_at")
+  .eq("user_id",user.id)
+  .order("updated_at",{ascending:false});
+
  if(error){console.error(error);return}
- chats=data||[];renderHistory();
+ chats=data||[];
+ renderHistory();
 }
+
 function renderHistory(){
- const box=$("history"),q=$("historySearch").value.toLowerCase();
+ const box=$("history");
+ const q=$("historySearch").value.toLowerCase();
  box.innerHTML="";
+
  chats.filter(c=>(c.title||"").toLowerCase().includes(q)).forEach(chat=>{
   const row=document.createElement("div");
   row.className="history-item"+(currentChat?.id===chat.id?" active":"");
+
   const open=document.createElement("button");
-  open.className="chat-open";open.textContent=chat.title||"Untitled chat";
+  open.className="chat-open";
+  open.textContent=chat.title||"Untitled chat";
   open.onclick=()=>openChat(chat.id);
-  const actions=document.createElement("div");actions.className="chat-actions";
-  const rename=document.createElement("button");rename.textContent="✎";rename.title="Rename";
+
+  const actions=document.createElement("div");
+  actions.className="chat-actions";
+
+  const rename=document.createElement("button");
+  rename.textContent="✎";
+  rename.title="Rename";
   rename.onclick=()=>renameChat(chat.id);
-  const del=document.createElement("button");del.textContent="×";del.className="delete";del.title="Delete";
+
+  const del=document.createElement("button");
+  del.textContent="×";
+  del.className="delete";
+  del.title="Delete";
   del.onclick=()=>deleteChat(chat.id);
-  actions.append(rename,del);row.append(open,actions);box.append(row);
+
+  actions.append(rename,del);
+  row.append(open,actions);
+  box.append(row);
  });
+
  if(!box.children.length){
-  const empty=document.createElement("div");empty.className="file-label";
-  empty.textContent="No chats found.";box.append(empty);
+  const empty=document.createElement("div");
+  empty.className="file-label";
+  empty.textContent="No chats found.";
+  box.append(empty);
  }
 }
+
 async function renameChat(id){
- const c=chats.find(x=>x.id===id);if(!c)return;
- const title=prompt("New chat name:",c.title||"");if(title===null)return;
+ const c=chats.find(x=>x.id===id);
+ if(!c)return;
+
+ const title=prompt("New chat name:",c.title||"");
+ if(title===null)return;
  if(!title.trim())return alert("Name cannot be empty.");
+
  const {error}=await sb.from("chats").update({title:title.trim()})
   .eq("id",id).eq("user_id",user.id);
+
  if(error)return alert(error.message);
+
  if(currentChat?.id===id)currentChat={...currentChat,title:title.trim()};
  loadChats();
 }
+
 async function deleteChat(id){
- const c=chats.find(x=>x.id===id);if(!c)return;
+ const c=chats.find(x=>x.id===id);
+ if(!c)return;
+
  if(!confirm(`Delete "${c.title}" and its messages?`))return;
- const {error}=await sb.from("chats").delete().eq("id",id).eq("user_id",user.id);
+
+ const {error}=await sb.from("chats").delete()
+  .eq("id",id).eq("user_id",user.id);
+
  if(error)return alert(error.message);
+
  if(currentChat?.id===id)newChat();
  loadChats();
 }
+
 function newChat(){
- currentChat=null;$("messages").innerHTML=welcomeHTML();
- renderHistory();closeSidebar();$("prompt").focus();
+ currentChat=null;
+ $("messages").innerHTML=welcomeHTML();
+ renderHistory();
+ closeSidebar();
+ $("prompt").focus();
 }
+
 async function openChat(id){
- const c=chats.find(x=>x.id===id);if(!c)return;
- currentChat=c;renderHistory();closeSidebar();
- const {data,error}=await sb.from("messages").select("role,content")
-  .eq("chat_id",id).order("created_at",{ascending:true});
+ const c=chats.find(x=>x.id===id);
+ if(!c)return;
+
+ currentChat=c;
+ renderHistory();
+ closeSidebar();
+
+ const {data,error}=await sb.from("messages")
+  .select("role,content")
+  .eq("chat_id",id)
+  .order("created_at",{ascending:true});
+
  if(error)return alert(error.message);
+
  $("messages").innerHTML="";
- if(!data?.length){$("messages").innerHTML=welcomeHTML();return}
+
+ if(!data?.length){
+  $("messages").innerHTML=welcomeHTML();
+  return;
+ }
+
  data.forEach(m=>addBubble(m.content,m.role));
 }
+
 async function saveMessage(chatId,role,content){
  const {error}=await sb.from("messages").insert({
-  chat_id:chatId,user_id:user.id,role,content
+  chat_id:chatId,
+  user_id:user.id,
+  role,
+  content
  });
  if(error)throw error;
 }
 
 /* MESSAGE DISPLAY */
+
 function renderMarkdown(target,text){
  if(window.marked&&window.DOMPurify){
-  target.innerHTML=window.DOMPurify.sanitize(window.marked.parse(text,{breaks:true,gfm:true}));
- }else target.textContent=text;
+  target.innerHTML=window.DOMPurify.sanitize(
+   window.marked.parse(text,{breaks:true,gfm:true})
+  );
+ }else{
+  target.textContent=text;
+ }
 }
+
 function addBubble(text,role){
- const welcome=$("welcome");if(welcome)welcome.remove();
- const row=document.createElement("div");row.className="message "+role;
- const bubble=document.createElement("div");bubble.className="bubble";
- if(role==="assistant")renderMarkdown(bubble,text);else bubble.textContent=text;
- row.append(bubble);$("messages").append(row);
+ const welcome=$("welcome");
+ if(welcome)welcome.remove();
+
+ const row=document.createElement("div");
+ row.className="message "+role;
+
+ const bubble=document.createElement("div");
+ bubble.className="bubble";
+
+ if(role==="assistant")renderMarkdown(bubble,text);
+ else bubble.textContent=text;
+
+ row.append(bubble);
+ $("messages").append(row);
  $("messages").scrollTop=$("messages").scrollHeight;
  return row;
 }
+
 function addImageToBubble(row,src){
- const img=document.createElement("img");img.src=src;img.className="image-result";img.alt="Generated image";
+ const img=document.createElement("img");
+ img.src=src;
+ img.className="image-result";
+ img.alt="Generated image";
  row.querySelector(".bubble").append(img);
 }
+
 function handleKey(e){
- if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMessage()}
+ if(e.key==="Enter"&&!e.shiftKey){
+  e.preventDefault();
+  sendMessage();
+ }
 }
 
-/* SSE STREAMING */
+/* STREAM READER */
+
 async function readStream(response,onToken){
  if(!response.ok){
-  let d={};try{d=await response.json()}catch(_){}
+  let d={};
+  try{d=await response.json()}catch(_){}
   throw Error(d.error||"AI request failed.");
  }
+
  if(!response.body)throw Error("Streaming response unavailable.");
- const reader=response.body.getReader(),decoder=new TextDecoder();
+
+ const reader=response.body.getReader();
+ const decoder=new TextDecoder();
  let buffer="",full="";
+
  while(true){
   const {value,done}=await reader.read();
   if(done)break;
+
   buffer+=decoder.decode(value,{stream:true});
-  const parts=buffer.split("\n\n");buffer=parts.pop()||"";
+  const parts=buffer.split("\n\n");
+  buffer=parts.pop()||"";
+
   for(const part of parts){
    const line=part.split("\n").find(x=>x.startsWith("data:"));
    if(!line)continue;
-   const raw=line.slice(5).trim();if(!raw)continue;
-   let data;try{data=JSON.parse(raw)}catch(_){continue}
+
+   const raw=line.slice(5).trim();
+   if(!raw)continue;
+
+   let data;
+   try{data=JSON.parse(raw)}catch(_){continue}
+
    if(data.error)throw Error(data.error);
-   if(data.token){full+=data.token;onToken(full)}
+
+   if(data.token){
+    full+=data.token;
+    onToken(full);
+   }
   }
  }
+
  if(buffer.trim()){
   const line=buffer.split("\n").find(x=>x.startsWith("data:"));
-  if(line){try{const d=JSON.parse(line.slice(5).trim());if(d.token){full+=d.token;onToken(full)}if(d.error)throw Error(d.error)}catch(e){if(e.message!=="Unexpected end of JSON input")throw e}}
+  if(line){
+   try{
+    const d=JSON.parse(line.slice(5).trim());
+    if(d.token){
+     full+=d.token;
+     onToken(full);
+    }
+    if(d.error)throw Error(d.error);
+   }catch(e){
+    if(e.message!=="Unexpected end of JSON input")throw e;
+   }
+  }
  }
+
  return full;
 }
 
+/* SEND MESSAGE */
+
 async function sendMessage(){
- const input=$("prompt"),message=input.value.trim();
+ const input=$("prompt");
+ const message=input.value.trim();
+
  if(!message||busy||!user)return;
- input.value="";busy=true;status("Thinking...");
+
+ input.value="";
+ busy=true;
+ status("Thinking...");
  addBubble(message,"user");
+
  let loading;
+
  try{
   if(!currentChat){
    const {data,error}=await sb.from("chats").insert({
-    user_id:user.id,title:message.slice(0,45)
+    user_id:user.id,
+    title:message.slice(0,45)
    }).select().single();
+
    if(error)throw error;
-   currentChat=data;chats.unshift(data);renderHistory();
+
+   currentChat=data;
+   chats.unshift(data);
+   renderHistory();
   }else{
-   await sb.from("chats").update({updated_at:new Date().toISOString()})
-    .eq("id",currentChat.id).eq("user_id",user.id);
+   await sb.from("chats").update({
+    updated_at:new Date().toISOString()
+   }).eq("id",currentChat.id).eq("user_id",user.id);
   }
 
   await saveMessage(currentChat.id,"user",message);
   loading=addBubble("QuBix is thinking...","assistant");
 
   const {data:history,error}=await sb.from("messages")
-   .select("role,content").eq("chat_id",currentChat.id)
+   .select("role,content")
+   .eq("chat_id",currentChat.id)
    .order("created_at",{ascending:true});
+
   if(error)throw error;
 
   const token=await authToken();
+
   const response=await fetch(API,{
    method:"POST",
-   headers:{"Content-Type":"application/json","Authorization":"Bearer "+token},
+   headers:{
+    "Content-Type":"application/json",
+    "Authorization":"Bearer "+token
+   },
    body:JSON.stringify({
     message,
     history:(history||[]).slice(0,-1),
@@ -465,37 +638,63 @@ async function sendMessage(){
 
   const bubble=loading.querySelector(".bubble");
   bubble.textContent="";
-  const reply=await readStream(response,text=>renderMarkdown(bubble,text));
+
+  const reply=await readStream(response,text=>{
+   renderMarkdown(bubble,text);
+  });
+
   if(!reply.trim())throw Error("No answer generated.");
+
   await saveMessage(currentChat.id,"assistant",reply);
   await loadChats();
-  attachedText="";attachedName="";$("fileLabel").textContent="";
+
+  attachedText="";
+  attachedName="";
+  $("fileLabel").textContent="";
   $("fileInput").value="";
+
  }catch(e){
   console.error(e);
-  if(loading)loading.querySelector(".bubble").textContent="Error: "+e.message;
-  else addBubble("Error: "+e.message,"assistant");
+
+  if(loading){
+   loading.querySelector(".bubble").textContent="Error: "+e.message;
+  }else{
+   addBubble("Error: "+e.message,"assistant");
+  }
  }finally{
-  busy=false;status("Ready");
+  busy=false;
+  status("Ready");
  }
 }
 
 /* WEB SEARCH */
+
 function toggleWeb(){
  webSearch=!webSearch;
  $("webButton").classList.toggle("active",webSearch);
 }
 
-/* FILES */
+/* FILE ATTACHMENT */
+
 async function attachFile(event){
- const file=event.target.files[0];if(!file)return;
+ const file=event.target.files[0];
+ if(!file)return;
+
  $("fileLabel").textContent="Reading "+file.name+"...";
+
  try{
   let text="";
+
   if(file.type==="application/pdf"||file.name.toLowerCase().endsWith(".pdf")){
    if(!window.pdfjsLib)throw Error("PDF reader failed to load.");
-   pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-   const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
+
+   pdfjsLib.GlobalWorkerOptions.workerSrc=
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+   const pdf=await pdfjsLib.getDocument({
+    data:await file.arrayBuffer()
+   }).promise;
+
    for(let i=1;i<=Math.min(pdf.numPages,30);i++){
     const page=await pdf.getPage(i);
     const content=await page.getTextContent();
@@ -504,46 +703,117 @@ async function attachFile(event){
   }else{
    text=await file.text();
   }
-  attachedText=text.slice(0,18000);attachedName=file.name;
+
+  attachedText=text.slice(0,18000);
+  attachedName=file.name;
   $("fileLabel").textContent="Attached: "+file.name;
+
  }catch(e){
   $("fileLabel").textContent="File error: "+e.message;
  }
 }
 
 /* IMAGE GENERATION */
+
 async function generateImage(){
  const prompt=$("prompt").value.trim();
+
  if(!prompt)return alert("Pehle image ka prompt likho.");
- if(busy)return;
- busy=true;status("Creating image...");
- const row=addBubble("Create an image: "+prompt,"user");
- const loading=addBubble("Generating image. This may take a little while...","assistant");
- $("prompt").value="";
+ if(busy||!user)return;
+
+ busy=true;
+ status("Creating image...");
+
+ let loading;
+
  try{
-  const data=await api({action:"generate_image",message:prompt});
-  loading.querySelector(".bubble").textContent=data.reply||"Image generated.";
+  if(!currentChat){
+   const {data,error}=await sb.from("chats").insert({
+    user_id:user.id,
+    title:("Image: "+prompt).slice(0,45)
+   }).select().single();
+
+   if(error)throw error;
+
+   currentChat=data;
+   chats.unshift(data);
+   renderHistory();
+  }
+
+  const userText="Create an image: "+prompt;
+  addBubble(userText,"user");
+  await saveMessage(currentChat.id,"user",userText);
+
+  loading=addBubble("Generating image. This may take a little while...","assistant");
+
+  $("prompt").value="";
+
+  const data=await api({
+   action:"generate_image",
+   message:prompt
+  });
+
+  const reply=data.reply||"Image generated.";
+  loading.querySelector(".bubble").textContent=reply;
+
   if(data.image)addImageToBubble(loading,data.image);
- }catch(e){loading.querySelector(".bubble").textContent="Image error: "+e.message}
- finally{busy=false;status("Ready")}
+
+  await saveMessage(
+   currentChat.id,
+   "assistant",
+   reply+" [Generated image was displayed but is not stored in chat history.]"
+  );
+
+  await loadChats();
+
+ }catch(e){
+  console.error(e);
+
+  if(loading){
+   loading.querySelector(".bubble").textContent="Image error: "+e.message;
+  }else{
+   addBubble("Image error: "+e.message,"assistant");
+  }
+ }finally{
+  busy=false;
+  status("Ready");
+ }
 }
 
 /* VOICE */
+
 function voiceInput(){
  const Speech=window.SpeechRecognition||window.webkitSpeechRecognition;
+
  if(!Speech)return alert("Voice input is not supported in this browser.");
- const rec=new Speech();rec.lang="en-US";rec.interimResults=false;
- rec.onresult=e=>{$("prompt").value=e.results[0][0].transcript};
+
+ const rec=new Speech();
+ rec.lang="en-US";
+ rec.interimResults=false;
+
+ rec.onresult=e=>{
+  $("prompt").value=e.results[0][0].transcript;
+ };
+
  rec.onerror=e=>alert("Voice error: "+e.error);
  rec.start();
 }
 
-/* SETTINGS */
+/* PROFILE SETTINGS */
+
 async function loadSettings(){
  if(!user)return;
- const {data,error}=await sb.from("qubix_profiles").select("*")
-  .eq("user_id",user.id).maybeSingle();
- if(error){console.warn("Profile load:",error.message);return}
+
+ const {data,error}=await sb.from("qubix_profiles")
+  .select("*")
+  .eq("user_id",user.id)
+  .maybeSingle();
+
+ if(error){
+  console.warn("Profile load:",error.message);
+  return;
+ }
+
  if(data){
   profile={
    custom_instructions:data.custom_instructions||"",
@@ -552,6 +822,7 @@ async function loadSettings(){
   };
  }
 }
+
 function openSettings(){
  $("customInstructions").value=profile.custom_instructions;
  $("preferredLanguage").value=profile.preferred_language;
@@ -559,80 +830,138 @@ function openSettings(){
  note("settingsNote","");
  $("settingsModal").classList.remove("hidden");
 }
+
 async function saveSettings(){
  profile={
   custom_instructions:$("customInstructions").value.trim(),
   preferred_language:$("preferredLanguage").value,
   response_style:$("responseStyle").value
  };
+
  const {error}=await sb.from("qubix_profiles").upsert({
-  user_id:user.id,...profile,updated_at:new Date().toISOString()
+  user_id:user.id,
+  ...profile,
+  updated_at:new Date().toISOString()
  },{onConflict:"user_id"});
- if(error){note("settingsNote","Save failed: "+error.message);return}
+
+ if(error){
+  note("settingsNote","Save failed: "+error.message);
+  return;
+ }
+
  note("settingsNote","Settings saved successfully.");
 }
 
 /* MEMORY MANAGER */
+
 async function openMemories(){
  $("memoryModal").classList.remove("hidden");
  note("memoryNote","");
  await loadMemories();
 }
+
 async function loadMemories(){
- const box=$("memoryList");box.textContent="Loading...";
+ const box=$("memoryList");
+ box.textContent="Loading...";
+
  try{
   const data=await api({action:"memory_list"});
   box.innerHTML="";
+
   const list=data.memories||[];
-  if(!list.length){box.textContent="No saved memories yet.";return}
+
+  if(!list.length){
+   box.textContent="No saved memories yet.";
+   return;
+  }
+
   list.forEach(m=>{
-   const row=document.createElement("div");row.className="memory-item";
-   const txt=document.createElement("div");txt.className="memory-text";
+   const row=document.createElement("div");
+   row.className="memory-item";
+
+   const txt=document.createElement("div");
+   txt.className="memory-text";
    txt.textContent=m.memory;
-   const del=document.createElement("button");del.textContent="Delete";del.title="Delete memory";
+
+   const del=document.createElement("button");
+   del.textContent="Delete";
+   del.title="Delete memory";
    del.onclick=()=>removeMemory(m.id);
-   row.append(txt,del);box.append(row);
+
+   row.append(txt,del);
+   box.append(row);
   });
- }catch(e){box.textContent="Could not load memories: "+e.message}
+
+ }catch(e){
+  box.textContent="Could not load memories: "+e.message;
+ }
 }
+
 async function addMemory(){
  const value=$("newMemory").value.trim();
+
  if(!value)return note("memoryNote","Write a memory first.");
+
  try{
   await api({action:"memory_save",memory:value});
   $("newMemory").value="";
   note("memoryNote","Memory saved.");
   await loadMemories();
- }catch(e){note("memoryNote","Save failed: "+e.message)}
+ }catch(e){
+  note("memoryNote","Save failed: "+e.message);
+ }
 }
+
 async function removeMemory(id){
  if(!confirm("Delete this memory?"))return;
- try{await api({action:"memory_delete",id});await loadMemories()}
- catch(e){note("memoryNote","Delete failed: "+e.message)}
+
+ try{
+  await api({action:"memory_delete",id});
+  await loadMemories();
+ }catch(e){
+  note("memoryNote","Delete failed: "+e.message);
+ }
 }
+
 async function clearMemories(){
  if(!confirm("Delete ALL your saved memories? This cannot be undone."))return;
+
  try{
   await api({action:"memory_clear"});
   note("memoryNote","All memories cleared.");
   await loadMemories();
- }catch(e){note("memoryNote","Could not clear memories: "+e.message)}
+ }catch(e){
+  note("memoryNote","Could not clear memories: "+e.message);
+ }
 }
 
 /* UI */
-function closeModal(id){$(id).classList.add("hidden")}
+
+function closeModal(id){
+ $(id).classList.add("hidden");
+}
+
 function toggleTheme(){
  document.body.classList.toggle("light");
- localStorage.setItem("qubix_theme",document.body.classList.contains("light")?"light":"dark");
+
+ localStorage.setItem(
+  "qubix_theme",
+  document.body.classList.contains("light")?"light":"dark"
+ );
 }
+
 function toggleSidebar(){
  $("sidebar").classList.toggle("open");
+ $("overlay").classList.remove("hidden");
  $("overlay").classList.toggle("show");
 }
+
 function closeSidebar(){
  $("sidebar").classList.remove("open");
  $("overlay").classList.remove("show");
+ $("overlay").classList.add("hidden");
 }
+
 document.addEventListener("DOMContentLoaded",init);
 </script>
 </body>
