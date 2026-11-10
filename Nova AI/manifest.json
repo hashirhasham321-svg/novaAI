@@ -1,0 +1,19 @@
+{
+  "name": "QuBix AI",
+  "short_name": "QuBix",
+  "description": "Your intelligent AI assistant",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#10111a",
+  "theme_color": "#10111a",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
