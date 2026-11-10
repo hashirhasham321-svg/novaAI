@@ -1,0 +1,122 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#10111a">
+<title>Shared conversation — QuBix AI</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#10111a;color:#f4f5fb;font-family:Arial,sans-serif}
+header{height:65px;border-bottom:1px solid #303449;display:flex;align-items:center;padding:0 22px;gap:12px}
+.logo{width:37px;height:37px;border-radius:12px;background:linear-gradient(135deg,#a08cff,#5e4be0);display:grid;place-items:center;font-weight:bold;font-size:20px}
+.brand{font-size:21px;font-weight:bold}
+.tag{margin-left:auto;color:#a9a5c7;font-size:12px}
+main{max-width:850px;margin:35px auto;padding:0 18px}
+h1{font-size:25px;overflow-wrap:anywhere}
+#status{color:#aaaec0;text-align:center;margin-top:100px}
+.message{display:flex;gap:13px;margin:25px 0;line-height:1.7}
+.avatar{height:34px;width:34px;flex-shrink:0;border-radius:10px;background:#282b40;display:grid;place-items:center;font-weight:bold}
+.content{flex:1;min-width:0;overflow-wrap:anywhere}
+.content pre{background:#090a11;border:1px solid #303449;padding:15px;border-radius:12px;overflow:auto}
+.content code{font-family:Consolas,monospace}
+.content blockquote{border-left:3px solid #8b78ff;padding-left:13px;color:#c4c5d2}
+.content img{max-width:100%;border-radius:12px}
+footer{text-align:center;color:#777b90;font-size:12px;padding:35px}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
+</head>
+<body>
+<header>
+ <div class="logo">Q</div>
+ <div class="brand">QuBix AI</div>
+ <div class="tag">Shared conversation</div>
+</header>
+<main>
+ <h1 id="title">Shared chat</h1>
+ <div id="status">Loading conversation...</div>
+ <div id="messages"></div>
+</main>
+<footer>Shared using QuBix AI</footer>
+
+<script>
+const SUPABASE_URL = "https://tehtdnaziyjwuacfxzsk.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_k50vs5oP1POySSKevkaSYw_fgPn7O_T";
+
+async function loadSharedChat() {
+  const token = new URLSearchParams(location.search).get("token");
+  const status = document.getElementById("status");
+
+  if (!token) {
+    status.textContent = "This share link is invalid.";
+    return;
+  }
+
+  if (!/^[0-9a-f-]{36}$/i.test(token)) {
+    status.textContent = "Invalid share token.";
+    return;
+  }
+
+  try {
+    const client = window.supabase.createClient(
+      SUPABASE_URL,
+      SUPABASE_ANON_KEY
+    );
+
+    const { data, error } = await client.rpc(
+      "qubix_get_shared_chat",
+      { p_token: token }
+    );
+
+    if (error) throw error;
+    if (!data) {
+      status.textContent = "This shared conversation is unavailable or has been removed.";
+      return;
+    }
+
+    document.getElementById("title").textContent =
+      data.title || "Shared conversation";
+
+    const messages = data.messages || [];
+    const container = document.getElementById("messages");
+    container.innerHTML = "";
+
+    if (!messages.length) {
+      status.textContent = "This conversation has no messages.";
+      return;
+    }
+
+    status.remove();
+
+    messages.forEach(message => {
+      const wrapper = document.createElement("div");
+      wrapper.className = "message";
+
+      const avatar = document.createElement("div");
+      avatar.className = "avatar";
+      avatar.textContent =
+        message.role === "assistant" ? "Q" : "U";
+
+      const content = document.createElement("div");
+      content.className = "content";
+      content.innerHTML = DOMPurify.sanitize(
+        marked.parse(message.content || "")
+      );
+
+      wrapper.append(avatar, content);
+      container.appendChild(wrapper);
+    });
+
+  } catch (error) {
+    console.error(error);
+    status.textContent = "Could not load this conversation.";
+  }
+}
+
+loadSharedChat();
+</script>
+</body>
+</html>
