@@ -2,833 +2,1212 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#10111a">
+<meta name="description" content="QuBix AI — Your intelligent AI assistant">
 <title>QuBix AI</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='42' fill='%238067ff'/%3E%3C/svg%3E">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
-
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
 <style>
-*{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#10111a;--panel:#191b28;--text:#f5f5fa;--muted:#999caf;--accent:#8067ff;--border:#292b3a;--danger:#ef6262}
-body.light{--bg:#f4f5fb;--panel:#fff;--text:#202235;--muted:#73768a;--border:#e4e5ed}
-body{background:var(--bg);color:var(--text);font-family:Arial,sans-serif;height:100vh;overflow:hidden}
-button,input,textarea{font:inherit}
+:root{
+  --bg:#10111a;--panel:#171923;--panel2:#202331;--text:#f4f5fa;
+  --muted:#9ba0b2;--line:#2b2e3d;--accent:#8b7cff;--accent2:#6e5df5;
+  --danger:#ef6262;--shadow:0 15px 45px #0005;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,Arial,sans-serif;height:100vh;overflow:hidden}
+button,input,textarea,select{font:inherit}
 button{cursor:pointer}
-.app{display:flex;height:100vh}
-.sidebar{width:275px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--border);padding:18px;display:flex;flex-direction:column;gap:16px;z-index:5}
-.logo{display:flex;align-items:center;gap:10px;font-size:25px;font-weight:bold;letter-spacing:-1px;color:var(--text)}
-.logo span,.topbar-brand span,.welcome h1 span{background:linear-gradient(100deg,#00d9ff,#268bff,#bd35ff);-webkit-background-clip:text;background-clip:text;color:transparent}
-.q-logo{width:43px;height:43px;flex-shrink:0}
-.newchat{background:linear-gradient(110deg,#00aeea,#6551ff,#a52aff);color:white;border:0;padding:13px;border-radius:10px;font-size:15px;width:100%}
-.history-title{color:var(--muted);font-size:12px;letter-spacing:.08em}
-.history-search{width:100%;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);outline:none}
-.history{overflow-y:auto;flex:1;min-height:0}
-.history-item{display:flex;align-items:center;gap:5px;padding:8px;border-radius:9px;margin-top:5px;color:var(--muted)}
-.history-item:hover,.history-item.active{background:var(--bg);color:var(--text)}
-.chat-open{flex:1;min-width:0;text-align:left;background:transparent;border:0;color:inherit;padding:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.chat-actions{display:flex;gap:3px;flex-shrink:0}
-.chat-actions button{border:0;background:transparent;color:var(--muted);padding:5px 6px;border-radius:6px}
-.chat-actions button:hover{background:var(--border);color:var(--text)}
-.chat-actions .delete:hover{color:var(--danger)}
-.sidebar-bottom{display:flex;gap:8px}
-.sidebar-bottom button{flex:1;padding:10px;border:1px solid var(--border);background:transparent;color:var(--text);border-radius:8px}
-.account{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.app{height:100vh;display:flex}
+.sidebar{width:270px;background:#141620;border-right:1px solid var(--line);display:flex;flex-direction:column;padding:17px;flex-shrink:0;transition:.25s}
+.brand{display:flex;align-items:center;gap:10px;font-size:22px;font-weight:800;margin:4px 0 24px}
+.logo{width:36px;height:36px;border-radius:12px;background:linear-gradient(135deg,#a28cff,#5c50e8);display:grid;place-items:center;font-weight:800;color:white}
+.new-chat{width:100%;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--panel2);color:var(--text);text-align:left}
+.new-chat:hover,.side-btn:hover{background:#292d3d}
+.side-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin:24px 0 9px}
+.search-box{width:100%;padding:10px 12px;background:var(--panel);border:1px solid var(--line);border-radius:10px;color:var(--text);outline:none}
+.chat-list{overflow:auto;flex:1;margin-top:9px}
+.chat-item{display:flex;align-items:center;gap:8px;padding:10px;border-radius:9px;color:var(--muted);cursor:pointer;font-size:13px}
+.chat-item:hover,.chat-item.active{background:var(--panel2);color:var(--text)}
+.chat-item .chat-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.chat-item .pin{color:#f5c76a}
+.side-bottom{border-top:1px solid var(--line);padding-top:12px}
+.side-btn{width:100%;background:none;border:0;color:var(--muted);padding:10px;text-align:left;border-radius:9px}
 .main{flex:1;display:flex;flex-direction:column;min-width:0}
-.topbar{height:65px;flex-shrink:0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;justify-content:space-between;padding:0 25px}
-.topbar-left{display:flex;align-items:center;gap:12px}
-.topbar h2{font-size:19px}
-.topbar-brand{display:flex;align-items:center;gap:9px}
-.status{font-size:12px;color:#45c98b;white-space:nowrap}
-.menu-btn{display:none;background:transparent;border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 11px}
-.messages{flex:1;overflow-y:auto;padding:30px 8%;display:flex;flex-direction:column;gap:22px}
-.welcome{text-align:center;margin:auto;max-width:600px}
-.welcome h1{font-size:38px;margin-bottom:12px}
-.welcome p{color:var(--muted);line-height:1.6}
-.message{max-width:850px;width:100%;margin:0 auto;line-height:1.65;overflow-wrap:anywhere}
-.message.user{text-align:right}
-.bubble{display:inline-block;padding:14px 18px;border-radius:15px;background:var(--panel);text-align:left;max-width:100%;white-space:normal}
-.user .bubble{background:var(--accent);color:white;white-space:pre-wrap}
-.bubble p{margin:0 0 10px}
-.bubble p:last-child{margin-bottom:0}
-.bubble h1,.bubble h2,.bubble h3{margin:14px 0 8px;line-height:1.3}
-.bubble ul,.bubble ol{padding-left:24px;margin:8px 0}
-.bubble li{margin:4px 0}
-.bubble pre{background:#090a10;color:#e9e9f4;padding:13px;border-radius:9px;overflow-x:auto;margin:10px 0}
-.bubble code{font-family:Consolas,monospace;font-size:.92em}
-.bubble :not(pre)>code{background:var(--bg);padding:2px 5px;border-radius:5px}
-.bubble blockquote{border-left:3px solid var(--accent);padding-left:12px;color:var(--muted);margin:10px 0}
-.bubble table{border-collapse:collapse;display:block;max-width:100%;overflow-x:auto;margin:10px 0}
-.bubble th,.bubble td{border:1px solid var(--border);padding:7px 10px;text-align:left}
-.composer-area{padding:15px 8% 22px}
-.composer{max-width:850px;margin:auto;display:flex;gap:10px;background:var(--panel);border:1px solid var(--border);padding:10px;border-radius:16px;align-items:flex-end}
-textarea{flex:1;resize:none;max-height:150px;min-height:42px;background:transparent;border:0;outline:0;color:var(--text);padding:12px}
-.action{border:0;background:linear-gradient(110deg,#00aeea,#6551ff);color:white;width:43px;height:43px;border-radius:12px;font-size:18px}
-.action.secondary{background:transparent;color:var(--muted)}
-.hint{text-align:center;color:var(--muted);font-size:11px;margin-top:12px}
-.auth-wrap{position:fixed;inset:0;background:var(--bg);z-index:10;display:flex;align-items:center;justify-content:center;padding:20px}
-.auth-card{width:100%;max-width:410px;background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:28px}
-.auth-card h1{font-size:27px;margin:22px 0 8px}
-.auth-card p{color:var(--muted);line-height:1.5;margin-bottom:15px}
-.auth-card input{width:100%;padding:13px;margin:7px 0;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:9px}
-.auth-card button{width:100%;padding:13px;margin-top:10px;background:linear-gradient(110deg,#00aeea,#6551ff,#a52aff);color:white;border:0;border-radius:9px}
-.auth-card button:disabled{opacity:.6;cursor:wait}
-.auth-card button.alt{background:transparent;border:1px solid var(--border);color:var(--text)}
-.auth-note{font-size:13px!important;margin-top:14px!important;min-height:18px}
-.overlay{display:none}
-.hidden{display:none!important}
-.qubix-tools,.file-status{max-width:850px;margin:0 auto 8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;color:var(--muted);font-size:12px}
-.qubix-tools select,.qubix-tools label,.qubix-tools button{font-size:12px;border:1px solid var(--border);background:var(--panel);color:var(--text);padding:8px;border-radius:8px}
-.qubix-tools button{background:linear-gradient(110deg,#00aeea,#6551ff);color:white;border:0;cursor:pointer}
-.file-status{display:block}
-@media(max-width:700px){
- .sidebar{position:fixed;left:0;top:0;bottom:0;width:min(300px,85vw);transform:translateX(-105%);transition:transform .22s ease;padding:17px;box-shadow:8px 0 30px #0004}
- .sidebar.open{transform:translateX(0)}
- .overlay.show{display:block;position:fixed;inset:0;background:#0008;z-index:4}
- .menu-btn{display:inline-block}
- .topbar{padding:0 13px}
- .messages{padding:20px 12px}
- .composer-area{padding:12px}
- .welcome h1{font-size:29px}
- .bubble{max-width:100%}
- .chat-actions button{padding:7px}
+.topbar{height:62px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 22px;flex-shrink:0}
+.top-left,.top-right{display:flex;align-items:center;gap:10px}
+.icon-btn{background:transparent;color:var(--muted);border:1px solid transparent;border-radius:9px;padding:8px 10px}
+.icon-btn:hover{background:var(--panel2);color:var(--text)}
+select,.select{background:var(--panel);border:1px solid var(--line);border-radius:9px;color:var(--text);padding:8px}
+.user-dot{width:32px;height:32px;border-radius:50%;background:var(--accent);display:grid;place-items:center;font-weight:700}
+.content{flex:1;overflow-y:auto;padding:25px 20px 150px}
+.welcome{max-width:760px;margin:10vh auto 0;text-align:center}
+.welcome h1{font-size:clamp(28px,5vw,43px);margin:0 0 12px}
+.gradient{background:linear-gradient(90deg,#a58cff,#62c6ff);background-clip:text;color:transparent}
+.welcome p{color:var(--muted);line-height:1.7}
+.suggestions{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:32px;text-align:left}
+.suggestion{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:16px;cursor:pointer;color:var(--text)}
+.suggestion:hover{border-color:var(--accent)}
+.suggestion small{display:block;color:var(--muted);margin-top:6px}
+.messages{max-width:850px;margin:0 auto}
+.message{display:flex;gap:12px;margin:24px 0;align-items:flex-start}
+.avatar{width:31px;height:31px;border-radius:10px;background:var(--panel2);display:grid;place-items:center;flex-shrink:0;font-size:13px}
+.message.user .avatar{background:var(--accent)}
+.message-body{min-width:0;flex:1;line-height:1.7;overflow-wrap:anywhere}
+.message-role{font-size:12px;color:var(--muted);margin-bottom:5px}
+.message-content{font-size:14px}
+.message-content p{margin:7px 0 13px}
+.message-content pre{background:#0b0c12;padding:14px;border-radius:10px;overflow:auto;border:1px solid var(--line)}
+.message-content code{font-family:Consolas,monospace;font-size:13px}
+.message-content :not(pre)>code{background:var(--panel2);padding:2px 5px;border-radius:5px}
+.message-content img{max-width:100%;border-radius:12px}
+.message-content a{color:#a99cff}
+.message-content blockquote{border-left:3px solid var(--accent);padding-left:13px;color:var(--muted)}
+.message-actions{display:flex;gap:5px;margin-top:8px;flex-wrap:wrap}
+.message-actions button{background:transparent;border:1px solid var(--line);color:var(--muted);border-radius:7px;padding:5px 8px;font-size:11px}
+.message-actions button:hover{color:var(--text);background:var(--panel2)}
+.generated-image{max-width:100%;border-radius:12px;margin-top:10px;display:block}
+.composer-wrap{position:fixed;bottom:0;left:270px;right:0;padding:15px 20px 18px;background:linear-gradient(transparent,var(--bg) 18%)}
+.composer{max-width:850px;margin:auto;background:var(--panel);border:1px solid var(--line);border-radius:17px;padding:11px 13px;box-shadow:var(--shadow)}
+#messageInput{width:100%;resize:none;min-height:48px;max-height:180px;background:transparent;border:0;outline:0;color:var(--text);padding:8px;font-size:14px}
+.composer-tools{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.tool-btn{border:0;background:transparent;color:var(--muted);border-radius:8px;padding:8px;font-size:12px}
+.tool-btn:hover{background:var(--panel2);color:var(--text)}
+.tool-btn.active{color:#b3a7ff}
+.send-btn{margin-left:auto;background:var(--accent2);color:white;border:0;border-radius:10px;padding:9px 15px;font-weight:600}
+.send-btn:disabled{opacity:.45;cursor:not-allowed}
+.disclaimer{text-align:center;color:var(--muted);font-size:10px;margin-top:8px}
+.toggle{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.toggle input{accent-color:var(--accent)}
+.toast{position:fixed;bottom:105px;left:50%;transform:translateX(-50%);background:#292d3d;border:1px solid var(--line);padding:11px 16px;border-radius:10px;z-index:1000;display:none;font-size:13px;box-shadow:var(--shadow)}
+.modal-backdrop{position:fixed;inset:0;background:#0009;display:none;align-items:center;justify-content:center;z-index:100; padding:15px}
+.modal{width:min(520px,100%);max-height:85vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:17px;padding:22px;box-shadow:var(--shadow)}
+.modal h2{margin-top:0}
+.modal input,.modal textarea,.modal select{width:100%;padding:11px;margin:7px 0 14px;background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:9px}
+.modal textarea{min-height:90px;resize:vertical}
+.primary{background:var(--accent2);color:white;border:0;padding:10px 15px;border-radius:9px}
+.secondary{background:var(--panel2);color:var(--text);border:1px solid var(--line);padding:10px 15px;border-radius:9px}
+.danger{color:var(--danger)}
+.modal-actions{display:flex;gap:9px;justify-content:flex-end;flex-wrap:wrap}
+.auth-screen{position:fixed;inset:0;background:var(--bg);z-index:500;display:none;align-items:center;justify-content:center;padding:18px}
+.auth-card{width:min(390px,100%);background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:25px}
+.auth-card input{width:100%;padding:12px;margin:8px 0;background:var(--bg);border:1px solid var(--line);border-radius:9px;color:var(--text)}
+.auth-card button{width:100%;margin-top:9px}
+.file-chip{font-size:11px;color:#b9adff;padding:5px 8px}
+.typing{color:var(--muted);font-size:13px}
+body.light{--bg:#f5f6fb;--panel:#fff;--panel2:#eceef6;--text:#202234;--muted:#73798c;--line:#dfe2ec;--shadow:0 15px 45px #18204415}
+body.light .sidebar{background:#fff}
+body.light .composer-wrap{background:linear-gradient(transparent,var(--bg) 18%)}
+body.light .message-content pre{background:#f0f1f6;color:#202234}
+@media(max-width:760px){
+ .sidebar{position:fixed;z-index:50;top:0;bottom:0;left:-280px;box-shadow:var(--shadow)}
+ .sidebar.open{left:0}
+ .composer-wrap{left:0;padding:10px}
+ .topbar{padding:0 12px}
+ .content{padding:18px 12px 150px}
+ .suggestions{grid-template-columns:1fr}
+ .welcome{margin-top:7vh}
 }
 </style>
 </head>
-
 <body>
 <div class="app">
- <aside class="sidebar" id="sidebar">
-  <div class="logo">
-   <svg class="q-logo" viewBox="0 0 100 100" role="img" aria-label="QuBix logo">
-    <defs><linearGradient id="qgrad" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#00d9ff"/><stop offset=".55" stop-color="#167cff"/><stop offset="1" stop-color="#a020ff"/></linearGradient></defs>
-    <path d="M50 7a43 43 0 1 0 29.5 74.2L96 98H72L60 85A43 43 0 1 1 85 50a34 34 0 0 1-9 23l12 12A50 50 0 1 0 50 7" fill="url(#qgrad)"/>
-    <path d="M50 30l5.5 13.5L69 49l-13.5 5.5L50 68l-5.5-13.5L31 49l13.5-5.5z" fill="#fff"/>
-   </svg>
-   <div>QuBix <span>AI</span></div>
-  </div>
-
-  <button class="newchat" onclick="newChat()">＋ New Chat</button>
-  <div class="history-title">YOUR CHATS</div>
-  <input class="history-search" id="historySearch" placeholder="Search chats..." oninput="renderHistory()">
-  <div class="history" id="history"></div>
-  <div class="account" id="accountEmail"></div>
-
-  <div class="sidebar-bottom">
-   <button onclick="toggleTheme()">◐ Theme</button>
-   <button onclick="logout()">↪ Logout</button>
-  </div>
- </aside>
-
- <div class="overlay" id="overlay" onclick="closeSidebar()"></div>
-
- <main class="main">
-  <header class="topbar">
-   <div class="topbar-left">
-    <button class="menu-btn" onclick="toggleSidebar()" aria-label="Open menu">☰</button>
-    <div class="topbar-brand">
-     <svg class="q-logo" viewBox="0 0 100 100" aria-label="QuBix logo">
-      <defs><linearGradient id="qgrad2" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#00d9ff"/><stop offset=".55" stop-color="#167cff"/><stop offset="1" stop-color="#a020ff"/></linearGradient></defs>
-      <path d="M50 7a43 43 0 1 0 29.5 74.2L96 98H72L60 85A43 43 0 1 1 85 50a34 34 0 0 1-9 23l12 12A50 50 0 1 0 50 7" fill="url(#qgrad2)"/>
-      <path d="M50 30l5.5 13.5L69 49l-13.5 5.5L50 68l-5.5-13.5L31 49l13.5-5.5z" fill="#fff"/>
-     </svg>
-     <h2>QuBix <span>AI</span></h2>
+  <aside class="sidebar" id="sidebar">
+    <div class="brand"><div class="logo">Q</div>QuBix AI</div>
+    <button class="new-chat" id="newChatBtn">＋ &nbsp; New chat</button>
+    <div class="side-label">Your conversations</div>
+    <input class="search-box" id="chatSearch" placeholder="Search chats...">
+    <div class="chat-list" id="chatList"></div>
+    <div class="side-bottom">
+      <button class="side-btn" id="memoryBtn">✦ &nbsp; Memories</button>
+      <button class="side-btn" id="settingsBtn">⚙ &nbsp; Settings</button>
+      <button class="side-btn" id="accountBtn">◉ &nbsp; Account / Sign in</button>
     </div>
-   </div>
-   <div class="status" id="status">● Ready</div>
-  </header>
+  </aside>
 
-  <section class="messages" id="messages">
-   <div class="welcome" id="welcome">
-    <h1>Hello, I'm <span>QuBix.</span></h1>
-    <p>Your intelligent AI assistant. Ask me anything, explore ideas, learn something new or get help with your work.</p>
-   </div>
-  </section>
+  <main class="main">
+    <header class="topbar">
+      <div class="top-left">
+        <button class="icon-btn" id="menuBtn">☰</button>
+        <strong id="topTitle">New chat</strong>
+      </div>
+      <div class="top-right">
+        <select id="modeSelect" aria-label="Assistant mode">
+          <option value="normal">✨ Normal</option>
+          <option value="study">📚 Study</option>
+          <option value="coding">💻 Coding</option>
+          <option value="creative">🎨 Creative</option>
+          <option value="research">🔎 Research</option>
+        </select>
+        <button class="icon-btn" id="shareBtn" title="Share chat">↗</button>
+        <div class="user-dot" id="userAvatar">Q</div>
+      </div>
+    </header>
 
-  <div class="composer-area">
-   <div class="qubix-tools">
-    <select id="assistantMode">
-     <option value="general">General</option>
-     <option value="study">Study</option>
-     <option value="coding">Coding</option>
-     <option value="business">Business</option>
-     <option value="writing">Writing</option>
-    </select>
+    <section class="content" id="content">
+      <div class="welcome" id="welcome">
+        <h1>Meet <span class="gradient">QuBix AI</span></h1>
+        <p>Your intelligent assistant for ideas, learning, coding, research and creativity.</p>
+        <div class="suggestions">
+          <button class="suggestion" data-prompt="Give me five useful ideas for a new website.">💡 Explore ideas<small>Discover something interesting</small></button>
+          <button class="suggestion" data-prompt="Teach me an interesting topic step by step.">📚 Learn something<small>Understand a new topic</small></button>
+          <button class="suggestion" data-prompt="Help me write a JavaScript function.">💻 Write code<small>Build and solve problems</small></button>
+          <button class="suggestion" data-prompt="Give me a creative story idea.">🎨 Get creative<small>Turn imagination into something</small></button>
+        </div>
+      </div>
+      <div class="messages" id="messages"></div>
+    </section>
 
-    <label><input type="checkbox" id="webSearch"> Web search</label>
-    <label><input type="checkbox" id="speakReplies"> Speak replies</label>
-
-    <label>📎 Attach file
-     <input type="file" id="fileInput" accept=".txt,.md,.csv,.json,.pdf,.html,.css,.js,.py,.log">
-    </label>
-
-    <button type="button" onclick="generateImage()">🎨 Image</button>
-   </div>
-
-   <div id="fileStatus" class="file-status"></div>
-
-   <div class="composer">
-    <textarea id="prompt" placeholder="Message QuBix AI..." rows="1" onkeydown="handleKey(event)"></textarea>
-    <button class="action secondary" onclick="voiceInput()" title="Voice input">🎙</button>
-    <button class="action" onclick="sendMessage()" title="Send">➤</button>
-   </div>
-
-   <div class="hint">QuBix AI can make mistakes. Check important information.</div>
-  </div>
- </main>
+    <div class="composer-wrap">
+      <div class="composer">
+        <div id="fileChip" class="file-chip" hidden></div>
+        <textarea id="messageInput" rows="1" placeholder="Message QuBix AI..."></textarea>
+        <div class="composer-tools">
+          <button class="tool-btn" id="attachBtn" title="Attach a text file">＋ Attach</button>
+          <input id="fileInput" type="file" hidden accept=".txt,.md,.csv,.json,.pdf,.docx,.png,.jpg,.jpeg,.webp">
+          <button class="tool-btn" id="imageBtn" title="Generate an image">▧ Image</button>
+          <button class="tool-btn" id="voiceBtn" title="Voice input">🎙 Voice</button>
+          <label class="toggle"><input type="checkbox" id="webToggle"> Web search</label>
+          <button class="send-btn" id="sendBtn">Send ↑</button>
+        </div>
+      </div>
+      <div class="disclaimer">QuBix AI can make mistakes. Check important information.</div>
+    </div>
+  </main>
 </div>
 
-<div class="auth-wrap" id="authScreen">
- <div class="auth-card">
-  <div class="logo">
-   <svg class="q-logo" viewBox="0 0 100 100" role="img" aria-label="QuBix logo">
-    <defs><linearGradient id="qgrad3" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#00d9ff"/><stop offset=".55" stop-color="#167cff"/><stop offset="1" stop-color="#a020ff"/></linearGradient></defs>
-    <path d="M50 7a43 43 0 1 0 29.5 74.2L96 98H72L60 85A43 43 0 1 1 85 50a34 34 0 0 1-9 23l12 12A50 50 0 1 0 50 7" fill="url(#qgrad3)"/>
-    <path d="M50 30l5.5 13.5L69 49l-13.5 5.5L50 68l-5.5-13.5L31 49l13.5-5.5z" fill="#fff"/>
-   </svg>
-   <div>QuBix <span>AI</span></div>
-  </div>
+<div class="toast" id="toast"></div>
 
-  <h1 id="authHeading">Welcome back</h1>
-  <p id="authDescription">Log in to access your private chats.</p>
-  <input id="authEmail" type="email" placeholder="Email address" autocomplete="email">
-  <input id="authPassword" type="password" placeholder="Password (at least 6 characters)" autocomplete="current-password">
-  <button id="authSubmit" type="button" onclick="submitAuth()">Log in</button>
-  <button class="alt" id="authSwitch" type="button" onclick="switchAuth()">Create a new account</button>
-  <p class="auth-note" id="authNote" aria-live="polite"></p>
- </div>
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal" id="modal"></div>
+</div>
+
+<div class="auth-screen" id="authScreen">
+  <div class="auth-card">
+    <div class="brand"><div class="logo">Q</div>QuBix AI</div>
+    <h2 id="authTitle">Welcome back</h2>
+    <p style="color:var(--muted);font-size:13px">Sign in to save your chats and memories.</p>
+    <input id="authEmail" type="email" placeholder="Email address" autocomplete="email">
+    <input id="authPassword" type="password" placeholder="Password" autocomplete="current-password">
+    <button class="primary" id="authSubmit">Sign in</button>
+    <button class="secondary" id="authSwitch">Create an account</button>
+    <button class="side-btn" id="forgotBtn">Forgot password?</button>
+    <button class="side-btn" id="guestBtn">Continue browsing</button>
+  </div>
 </div>
 
 <script>
 "use strict";
 
-const SUPABASE_URL="https://tehtdnaziyjwuacfxzsk.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY="sb_publishable_k50vs5oP1POySSKevkaSYw_fgPn7O_T";
+/* QuBix configuration */
+const SUPABASE_URL = "https://tehtdnaziyjwuacfxzsk.supabase.co";
+const SUPABASE_KEY = "sb_publishable_k50vs5oP1POySSKevkaSYw_fgPn7O_T";
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-let supabaseClient=null;
-let currentUser=null;
-let chats=[];
-let currentChat=null;
-let busy=false;
-let authMode="login";
-let authListenerStarted=false;
-let attachedText="";
-let attachedName="";
+const API_URL = "/api/chat";
+const $ = id => document.getElementById(id);
 
-const el=id=>document.getElementById(id);
+let currentUser = null;
+let currentSession = null;
+let currentChatId = null;
+let chats = [];
+let currentMessages = [];
+let attachedFile = null;
+let attachedText = "";
+let isSending = false;
+let authMode = "signin";
+let memories = [];
+let profile = {
+  preferred_language: "auto",
+  response_style: "balanced",
+  custom_instructions: ""
+};
 
-function setNote(message){
- el("authNote").textContent=message;
+marked.setOptions({
+  breaks: true,
+  gfm: true
+});
+
+function toast(message) {
+  const el = $("toast");
+  el.textContent = message;
+  el.style.display = "block";
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => el.style.display = "none", 3000);
 }
 
-function setStatus(message){
- el("status").textContent="● "+message;
+function safeMarkdown(text) {
+  const html = marked.parse(String(text || ""));
+  return DOMPurify.sanitize(html, {
+    USE_PROFILES: { html: true },
+    ADD_ATTR: ["target", "rel"]
+  });
 }
 
-function welcomeHTML(){
- return `<div class="welcome" id="welcome"><h1>Hello, I'm <span>QuBix.</span></h1><p>Your intelligent AI assistant. What would you like to explore today?</p></div>`;
+function escapeHTML(value) {
+  return String(value ?? "").replace(/[&<>"']/g, c => ({
+    "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
+  }[c]));
 }
 
-function switchAuth(){
- authMode=authMode==="login"?"signup":"login";
- el("authHeading").textContent=authMode==="login"?"Welcome back":"Create your account";
- el("authDescription").textContent=authMode==="login"?"Log in to access your private chats.":"Sign up to save your chats privately.";
- el("authSubmit").textContent=authMode==="login"?"Log in":"Create account";
- el("authSwitch").textContent=authMode==="login"?"Create a new account":"I already have an account";
- el("authPassword").value="";
- setNote("");
+function showModal(html) {
+  $("modal").innerHTML = html;
+  $("modalBackdrop").style.display = "flex";
 }
 
-async function submitAuth(){
- if(!supabaseClient){
-  setNote("Supabase connection is not ready. Refresh the page.");
-  return;
- }
-
- const email=el("authEmail").value.trim();
- const password=el("authPassword").value;
-
- if(!email||!password){
-  setNote("Please enter your email and password.");
-  return;
- }
-
- if(password.length<6){
-  setNote("Password must be at least 6 characters.");
-  return;
- }
-
- const button=el("authSubmit");
- button.disabled=true;
- button.textContent="Please wait...";
- setNote("");
-
- try{
-  if(authMode==="signup"){
-   const {data,error}=await supabaseClient.auth.signUp({email,password});
-   if(error)throw error;
-   setNote(data.session?"Account created. Signing you in...":"Account created! Check your email to confirm, then log in.");
-  }else{
-   const {error}=await supabaseClient.auth.signInWithPassword({email,password});
-   if(error)throw error;
-   setNote("Login successful!");
-  }
- }catch(error){
-  console.error(error);
-  setNote(error.message||"Authentication failed");
- }finally{
-  button.disabled=false;
-  button.textContent=authMode==="login"?"Log in":"Create account";
- }
+function closeModal() {
+  $("modalBackdrop").style.display = "none";
+  $("modal").innerHTML = "";
 }
 
-function showApp(user){
- currentUser=user;
- el("authScreen").classList.add("hidden");
- el("accountEmail").textContent=user.email||"Signed in";
- loadChats();
+$("modalBackdrop").addEventListener("click", e => {
+  if (e.target === $("modalBackdrop")) closeModal();
+});
+
+function setAuthScreen(show) {
+  $("authScreen").style.display = show ? "flex" : "none";
 }
 
-async function logout(){
- if(!supabaseClient)return;
- const {error}=await supabaseClient.auth.signOut();
- if(error){
-  alert(error.message);
-  return;
- }
- currentUser=null;
- chats=[];
- currentChat=null;
- el("history").innerHTML="";
- el("messages").innerHTML=welcomeHTML();
- el("authScreen").classList.remove("hidden");
- setNote("");
+async function getToken() {
+  if (!currentSession) return null;
+  return currentSession.access_token;
 }
 
-async function init(){
- if(localStorage.getItem("qubix_theme")==="light"){
-  document.body.classList.add("light");
- }
+async function apiRequest(payload) {
+  const token = await getToken();
+  if (!token) throw new Error("Please sign in first.");
 
- if(!window.supabase||!window.supabase.createClient){
-  setNote("Supabase library could not load. Check your internet connection and refresh.");
-  return;
- }
-
- try{
-  supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
-
-  const {data,error}=await supabaseClient.auth.getSession();
-  if(error)throw error;
-
-  if(data.session?.user)showApp(data.session.user);
-
-  if(!authListenerStarted){
-   authListenerStarted=true;
-   supabaseClient.auth.onAuthStateChange((event,session)=>{
-    if(session?.user){
-     showApp(session.user);
-    }else if(event==="SIGNED_OUT"){
-     currentUser=null;
-     chats=[];
-     currentChat=null;
-     el("authScreen").classList.remove("hidden");
-    }
-   });
-  }
- }catch(error){
-  console.error(error);
-  setNote("Connection error: "+error.message);
- }
-}
-
-async function loadChats(){
- if(!currentUser)return;
-
- const {data,error}=await supabaseClient
-  .from("chats")
-  .select("id,title,created_at,updated_at")
-  .eq("user_id",currentUser.id)
-  .order("updated_at",{ascending:false});
-
- if(error){
-  console.error(error);
-  alert("Could not load chats: "+error.message);
-  return;
- }
-
- chats=data||[];
- renderHistory();
-}
-
-function renderHistory(){
- const box=el("history");
- const query=(el("historySearch")?.value||"").trim().toLowerCase();
- box.innerHTML="";
-
- const visible=chats.filter(chat=>(chat.title||"").toLowerCase().includes(query));
-
- visible.forEach(chat=>{
-  const item=document.createElement("div");
-  item.className="history-item"+(currentChat?.id===chat.id?" active":"");
-
-  const open=document.createElement("button");
-  open.className="chat-open";
-  open.textContent=chat.title||"Untitled chat";
-  open.title=chat.title||"";
-  open.onclick=()=>openChat(chat.id);
-
-  const actions=document.createElement("div");
-  actions.className="chat-actions";
-
-  const rename=document.createElement("button");
-  rename.type="button";
-  rename.textContent="✎";
-  rename.title="Rename chat";
-  rename.setAttribute("aria-label","Rename chat");
-  rename.onclick=()=>renameChat(chat.id);
-
-  const del=document.createElement("button");
-  del.type="button";
-  del.className="delete";
-  del.textContent="×";
-  del.title="Delete chat";
-  del.setAttribute("aria-label","Delete chat");
-  del.onclick=()=>deleteChat(chat.id);
-
-  actions.append(rename,del);
-  item.append(open,actions);
-  box.appendChild(item);
- });
-
- if(!visible.length){
-  const empty=document.createElement("div");
-  empty.style.cssText="color:var(--muted);font-size:13px;padding:12px";
-  empty.textContent=query?"No matching chats.":"No chats yet.";
-  box.appendChild(empty);
- }
-}
-
-async function renameChat(id){
- const chat=chats.find(c=>c.id===id);
- if(!chat||!currentUser)return;
-
- const title=prompt("Enter a new chat name:",chat.title||"");
- if(title===null)return;
-
- const clean=title.trim();
- if(!clean){
-  alert("Chat name cannot be empty.");
-  return;
- }
-
- const {error}=await supabaseClient
-  .from("chats")
-  .update({title:clean})
-  .eq("id",id)
-  .eq("user_id",currentUser.id);
-
- if(error){
-  alert("Could not rename chat: "+error.message);
-  return;
- }
-
- if(currentChat?.id===id)currentChat={...currentChat,title:clean};
- await loadChats();
-}
-
-async function deleteChat(id){
- const chat=chats.find(c=>c.id===id);
- if(!chat||!currentUser)return;
-
- if(!confirm(`Delete "${chat.title}" and all its messages? This cannot be undone.`))return;
-
- const {error}=await supabaseClient
-  .from("chats")
-  .delete()
-  .eq("id",id)
-  .eq("user_id",currentUser.id);
-
- if(error){
-  alert("Could not delete chat: "+error.message);
-  return;
- }
-
- if(currentChat?.id===id){
-  currentChat=null;
-  el("messages").innerHTML=welcomeHTML();
- }
-
- await loadChats();
-}
-
-function newChat(){
- currentChat=null;
- el("messages").innerHTML=welcomeHTML();
- renderHistory();
- closeSidebar();
- el("prompt").focus();
-}
-
-async function openChat(id){
- const chat=chats.find(item=>item.id===id);
- if(!chat)return;
-
- currentChat=chat;
- renderHistory();
- closeSidebar();
-
- const {data,error}=await supabaseClient
-  .from("messages")
-  .select("id,role,content,created_at")
-  .eq("chat_id",id)
-  .order("created_at",{ascending:true});
-
- if(error){
-  alert("Could not load messages: "+error.message);
-  return;
- }
-
- const box=el("messages");
- box.innerHTML="";
-
- if(!data||!data.length){
-  box.innerHTML=welcomeHTML();
-  return;
- }
-
- data.forEach(message=>addBubble(message.content,message.role));
-}
-
-function renderMarkdown(target,text){
- if(window.marked&&window.DOMPurify){
-  try{
-   target.innerHTML=window.DOMPurify.sanitize(
-    window.marked.parse(text,{breaks:true,gfm:true})
-   );
-   return;
-  }catch(error){
-   console.warn("Markdown rendering fallback:",error);
-  }
- }
- target.textContent=text;
-}
-
-function addBubble(text,role){
- const box=el("messages");
- const welcome=el("welcome");
- if(welcome)welcome.remove();
-
- const row=document.createElement("div");
- row.className="message "+role;
-
- const bubble=document.createElement("div");
- bubble.className="bubble";
-
- if(role==="assistant")renderMarkdown(bubble,text);
- else bubble.textContent=text;
-
- row.appendChild(bubble);
- box.appendChild(row);
- box.scrollTop=box.scrollHeight;
- return row;
-}
-
-function handleKey(event){
- if(event.key==="Enter"&&!event.shiftKey){
-  event.preventDefault();
-  sendMessage();
- }
-}
-
-async function saveMessage(chatId,role,content){
- const {error}=await supabaseClient
-  .from("messages")
-  .insert({
-   chat_id:chatId,
-   user_id:currentUser.id,
-   role,
-   content
+  const response = await fetch(API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + token
+    },
+    body: JSON.stringify(payload)
   });
 
- if(error)throw error;
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "Request failed.");
+  return data;
 }
 
-async function sendMessage(){
- const input=el("prompt");
- const message=input.value.trim();
+function setLoading(value) {
+  isSending = value;
+  $("sendBtn").disabled = value;
+  $("sendBtn").textContent = value ? "Working..." : "Send ↑";
+}
 
- if(!message||busy||!currentUser)return;
+function showWelcome(show) {
+  $("welcome").style.display = show ? "block" : "none";
+}
 
- input.value="";
- busy=true;
- setStatus("Thinking...");
- addBubble(message,"user");
+function renderMessage(message, index) {
+  const isUser = message.role === "user";
+  const content = safeMarkdown(message.content || "");
+  const wrapper = document.createElement("article");
+  wrapper.className = "message " + (isUser ? "user" : "assistant");
 
- try{
-  if(!currentChat){
-   const {data,error}=await supabaseClient
+  const avatar = document.createElement("div");
+  avatar.className = "avatar";
+  avatar.textContent = isUser ? "U" : "Q";
+
+  const body = document.createElement("div");
+  body.className = "message-body";
+  const role = document.createElement("div");
+  role.className = "message-role";
+  role.textContent = isUser ? "You" : "QuBix AI";
+
+  const text = document.createElement("div");
+  text.className = "message-content";
+  text.innerHTML = content;
+
+  const actions = document.createElement("div");
+  actions.className = "message-actions";
+
+  const copy = document.createElement("button");
+  copy.textContent = "Copy";
+  copy.onclick = () => copyText(message.content || "");
+  actions.appendChild(copy);
+
+  if (!isUser) {
+    const regenerate = document.createElement("button");
+    regenerate.textContent = "Regenerate";
+    regenerate.onclick = () => regenerateAnswer(index);
+    actions.appendChild(regenerate);
+
+    const good = document.createElement("button");
+    good.textContent = "👍";
+    good.onclick = () => toast("Thanks for your feedback!");
+    actions.appendChild(good);
+
+    const bad = document.createElement("button");
+    bad.textContent = "👎";
+    bad.onclick = () => toast("Feedback noted.");
+    actions.appendChild(bad);
+  }
+
+  body.append(role, text, actions);
+  wrapper.append(avatar, body);
+  $("messages").appendChild(wrapper);
+}
+
+function renderMessages() {
+  $("messages").innerHTML = "";
+  showWelcome(currentMessages.length === 0);
+  currentMessages.forEach((m, i) => renderMessage(m, i));
+  $("content").scrollTop = $("content").scrollHeight;
+}
+
+function renderChats() {
+  const query = $("chatSearch").value.toLowerCase().trim();
+  $("chatList").innerHTML = "";
+
+  const filtered = chats.filter(c =>
+    String(c.title || "New chat").toLowerCase().includes(query)
+  );
+
+  filtered.forEach(chat => {
+    const item = document.createElement("div");
+    item.className = "chat-item" + (chat.id === currentChatId ? " active" : "");
+
+    const pin = document.createElement("span");
+    pin.className = "pin";
+    pin.textContent = chat.pinned ? "★" : "▤";
+
+    const name = document.createElement("span");
+    name.className = "chat-name";
+    name.textContent = chat.title || "New chat";
+
+    const menu = document.createElement("button");
+    menu.className = "icon-btn";
+    menu.textContent = "⋯";
+    menu.title = "Chat options";
+    menu.onclick = e => {
+      e.stopPropagation();
+      chatOptions(chat);
+    };
+
+    item.append(pin, name, menu);
+    item.onclick = () => openChat(chat.id);
+    $("chatList").appendChild(item);
+  });
+}
+
+async function loadChats() {
+  if (!currentUser) {
+    chats = [];
+    renderChats();
+    return;
+  }
+
+  const { data, error } = await db
+    .from("chats")
+    .select("*")
+    .eq("user_id", currentUser.id)
+    .order("updated_at", { ascending: false });
+
+  if (error) {
+    console.error(error);
+    toast("Could not load chat history.");
+    return;
+  }
+
+  chats = (data || []).map(c => ({
+    ...c,
+    pinned: Boolean(c.pinned)
+  }));
+  renderChats();
+}
+
+async function createChat() {
+  if (!currentUser) {
+    toast("Sign in to save conversations.");
+    setAuthScreen(true);
+    return;
+  }
+
+  const { data, error } = await db
     .from("chats")
     .insert({
-     user_id:currentUser.id,
-     title:message.slice(0,35)
+      user_id: currentUser.id,
+      title: "New chat"
     })
     .select()
     .single();
 
-   if(error)throw error;
-
-   currentChat=data;
-   chats.unshift(data);
-   renderHistory();
-  }else{
-   const {error}=await supabaseClient
-    .from("chats")
-    .update({updated_at:new Date().toISOString()})
-    .eq("id",currentChat.id)
-    .eq("user_id",currentUser.id);
-
-   if(error)throw error;
+  if (error) {
+    toast(error.message);
+    return;
   }
 
-  await saveMessage(currentChat.id,"user",message);
-
-  const loading=addBubble("QuBix is thinking...","assistant");
-
-  const {data:{session},error:sessionError}=await supabaseClient.auth.getSession();
-
-  if(sessionError)throw sessionError;
-  if(!session?.access_token)throw new Error("Your session expired. Please log in again.");
-
-  const {data:historyData,error:historyError}=await supabaseClient
-   .from("messages")
-   .select("role,content")
-   .eq("chat_id",currentChat.id)
-   .order("created_at",{ascending:true})
-   .limit(16);
-
-  if(historyError)throw historyError;
-
-  const history=(historyData||[]).slice(0,-1);
-
-  const response=await fetch("/api/chat",{
-   method:"POST",
-   headers:{
-    "Content-Type":"application/json",
-    "Authorization":`Bearer ${session.access_token}`
-   },
-   body:JSON.stringify({
-    message,
-    mode:el("assistantMode")?.value||"general",
-    webSearch:!!el("webSearch")?.checked,
-    fileText:attachedText,
-    fileName:attachedName,
-    history
-   })
-  });
-
-  let data={};
-  try{data=await response.json()}catch(_){}
-
-  if(!response.ok)throw new Error(data.error||"AI request failed.");
-
-  const answer=data.reply||"No answer generated.";
-  renderMarkdown(loading.querySelector(".bubble"),answer);
-
-  if(el("speakReplies")?.checked)speakReply(answer);
-
-  await saveMessage(currentChat.id,"assistant",answer);
+  currentChatId = data.id;
+  currentMessages = [];
+  $("topTitle").textContent = data.title;
+  renderMessages();
   await loadChats();
-
-  attachedText="";
-  attachedName="";
-  if(el("fileStatus"))el("fileStatus").textContent="";
-  if(el("fileInput"))el("fileInput").value="";
-
- }catch(error){
-  console.error("Chat error:",error);
-  addBubble("Error: "+error.message,"assistant");
- }finally{
-  busy=false;
-  setStatus("Ready");
- }
+  $("messageInput").focus();
 }
 
-function toggleTheme(){
- document.body.classList.toggle("light");
- localStorage.setItem(
-  "qubix_theme",
-  document.body.classList.contains("light")?"light":"dark"
- );
+async function openChat(id) {
+  if (!currentUser) return;
+
+  const { data: chat, error: chatError } = await db
+    .from("chats")
+    .select("*")
+    .eq("id", id)
+    .eq("user_id", currentUser.id)
+    .single();
+
+  if (chatError) {
+    toast("Could not open chat.");
+    return;
+  }
+
+  const { data: messages, error } = await db
+    .from("messages")
+    .select("*")
+    .eq("chat_id", id)
+    .eq("user_id", currentUser.id)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    toast("Could not load messages.");
+    return;
+  }
+
+  currentChatId = id;
+  currentMessages = messages || [];
+  $("topTitle").textContent = chat.title || "Chat";
+  renderChats();
+  renderMessages();
+  $("sidebar").classList.remove("open");
 }
 
-function voiceInput(){
- const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+async function saveMessage(role, content) {
+  if (!currentUser || !currentChatId) return;
 
- if(!SR){
-  alert("Voice input needs Chrome or Edge.");
-  return;
- }
+  const { error } = await db.from("messages").insert({
+    chat_id: currentChatId,
+    user_id: currentUser.id,
+    role,
+    content
+  });
 
- const r=new SR();
- r.lang="en-US";
- r.onresult=e=>{
-  el("prompt").value=e.results[0][0].transcript;
- };
- r.onerror=e=>alert("Voice error: "+e.error);
- r.start();
+  if (error) throw error;
+
+  await db.from("chats")
+    .update({ updated_at: new Date().toISOString() })
+    .eq("id", currentChatId)
+    .eq("user_id", currentUser.id);
 }
 
-function speakReply(text){
- if(!window.speechSynthesis){
-  alert("Spoken replies are not supported here.");
-  return;
- }
+async function updateChatTitleFromMessage(message) {
+  if (!currentChatId) return;
+  const chat = chats.find(c => c.id === currentChatId);
+  if (!chat || chat.title !== "New chat") return;
 
- speechSynthesis.cancel();
+  const title = message.trim().replace(/\s+/g, " ").slice(0, 45) || "New chat";
+  await db.from("chats")
+    .update({ title })
+    .eq("id", currentChatId)
+    .eq("user_id", currentUser.id);
 
- const clean=String(text)
-  .replace(/```[\s\S]*?```/g," code omitted ")
-  .slice(0,4000);
-
- const u=new SpeechSynthesisUtterance(clean);
- u.lang=/[\u0600-\u06FF]/.test(u.text)?"ur-PK":"en-US";
- speechSynthesis.speak(u);
+  $("topTitle").textContent = title;
+  await loadChats();
 }
 
-async function readSelectedFile(file){
- if(!file)return;
+async function sendMessage(forcedMessage = null) {
+  if (isSending) return;
 
- if(file.size>5*1024*1024){
-  alert("File limit is 5 MB.");
-  return;
- }
+  const input = $("messageInput");
+  const message = String(forcedMessage ?? input.value).trim();
+  if (!message && !attachedText) return;
 
- el("fileStatus").textContent="Reading "+file.name+"...";
+  if (!currentUser) {
+    toast("Sign in to use QuBix AI.");
+    setAuthScreen(true);
+    return;
+  }
 
- try{
-  let text="";
+  if (!currentChatId) await createChat();
+  if (!currentChatId) return;
 
-  if(file.name.toLowerCase().endsWith(".pdf")){
-   if(!window.pdfjsLib){
-    await new Promise((resolve,reject)=>{
-     const script=document.createElement("script");
-     script.src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
-     script.onload=resolve;
-     script.onerror=reject;
-     document.head.appendChild(script);
+  const actualMessage = attachedText
+    ? message + "\n\nAttached file (" + (attachedFile?.name || "file") + "):\n" + attachedText
+    : message;
+
+  input.value = "";
+  input.style.height = "auto";
+  clearAttachment();
+
+  const userMessage = { role: "user", content: actualMessage };
+  currentMessages.push(userMessage);
+  renderMessages();
+
+  setLoading(true);
+  const typing = document.createElement("div");
+  typing.className = "typing";
+  typing.textContent = "QuBix AI is thinking...";
+  $("messages").appendChild(typing);
+
+  try {
+    await saveMessage("user", actualMessage);
+    await updateChatTitleFromMessage(message || "Attached file");
+
+    const history = currentMessages.slice(0, -1).slice(-20);
+    const data = await apiRequest({
+      message: actualMessage,
+      messages: history,
+      action: "chat",
+      mode: $("modeSelect").value,
+      webSearchEnabled: $("webToggle").checked
     });
-   }
 
-   pdfjsLib.GlobalWorkerOptions.workerSrc=
-    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    const answer = data.answer || "I couldn't generate an answer.";
+    currentMessages.push({ role: "assistant", content: answer });
+    await saveMessage("assistant", answer);
 
-   const pdf=await pdfjsLib.getDocument({
-    data:await file.arrayBuffer()
-   }).promise;
-
-   const parts=[];
-
-   for(let n=1;n<=Math.min(pdf.numPages,30);n++){
-    const page=await pdf.getPage(n);
-    const content=await page.getTextContent();
-    parts.push(content.items.map(x=>x.str).join(" "));
-   }
-
-   text=parts.join("\n");
-  }else{
-   text=await file.text();
+    typing.remove();
+    renderMessages();
+    await loadChats();
+  } catch (error) {
+    typing.remove();
+    currentMessages.pop();
+    renderMessages();
+    toast(error.message || "Something went wrong.");
+  } finally {
+    setLoading(false);
+    input.focus();
   }
-
-  attachedText=text.slice(0,18000);
-  attachedName=file.name;
-  el("fileStatus").textContent="Attached: "+file.name;
-
- }catch(error){
-  attachedText="";
-  attachedName="";
-  el("fileStatus").textContent="File read error: "+error.message;
- }
 }
 
-async function generateImage(){
- const prompt=el("prompt").value.trim();
+async function regenerateAnswer(index) {
+  if (isSending || !currentUser) return;
 
- if(!prompt){
-  alert("Image prompt message box mein likhein.");
-  return;
- }
+  const target = currentMessages[index];
+  if (!target || target.role !== "assistant") return;
 
- if(busy||!currentUser)return;
+  let userIndex = index - 1;
+  while (userIndex >= 0 && currentMessages[userIndex].role !== "user") userIndex--;
+  if (userIndex < 0) return;
 
- busy=true;
- setStatus("Generating image...");
+  const userMessage = currentMessages[userIndex].content;
+  currentMessages = currentMessages.slice(0, index);
+  renderMessages();
+  setLoading(true);
 
- try{
-  const {data:{session}}=await supabaseClient.auth.getSession();
+  try {
+    const data = await apiRequest({
+      message: userMessage,
+      messages: currentMessages.slice(0, -1).slice(-20),
+      action: "chat",
+      mode: $("modeSelect").value,
+      webSearchEnabled: $("webToggle").checked
+    });
 
-  if(!session?.access_token){
-   throw new Error("Please log in again.");
+    const answer = data.answer || "No answer returned.";
+    currentMessages.push({ role: "assistant", content: answer });
+    await saveMessage("assistant", answer);
+    renderMessages();
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    setLoading(false);
+  }
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(String(text || ""));
+    toast("Copied!");
+  } catch {
+    toast("Copy failed. Please select the text manually.");
+  }
+}
+
+function chatOptions(chat) {
+  showModal(`
+    <h2>Chat options</h2>
+    <p style="color:var(--muted)">${escapeHTML(chat.title || "Chat")}</p>
+    <button class="secondary" style="width:100%;margin:5px 0" id="renameChat">✎ Rename chat</button>
+    <button class="secondary" style="width:100%;margin:5px 0" id="pinChat">${chat.pinned ? "☆ Unpin chat" : "★ Pin chat"}</button>
+    <button class="secondary" style="width:100%;margin:5px 0" id="exportChat">⇩ Export Markdown</button>
+    <button class="secondary" style="width:100%;margin:5px 0" id="shareThisChat">↗ Share chat</button>
+    <button class="secondary danger" style="width:100%;margin:5px 0" id="deleteChat">⌫ Delete chat</button>
+    <div class="modal-actions" style="margin-top:14px"><button class="secondary" id="closeChatOptions">Close</button></div>
+  `);
+
+  $("closeChatOptions").onclick = closeModal;
+
+  $("renameChat").onclick = async () => {
+    const title = prompt("Enter a new chat name:", chat.title || "");
+    if (!title?.trim()) return;
+    const { error } = await db.from("chats")
+      .update({ title: title.trim().slice(0, 100) })
+      .eq("id", chat.id)
+      .eq("user_id", currentUser.id);
+    if (error) return toast(error.message);
+    if (currentChatId === chat.id) $("topTitle").textContent = title.trim();
+    closeModal();
+    await loadChats();
+  };
+
+  $("pinChat").onclick = async () => {
+    const { error } = await db.from("chats")
+      .update({ pinned: !chat.pinned })
+      .eq("id", chat.id)
+      .eq("user_id", currentUser.id);
+    closeModal();
+    if (error) toast("Pinning needs the pinned column in chats table.");
+    else {
+      toast(chat.pinned ? "Chat unpinned." : "Chat pinned.");
+      await loadChats();
+    }
+  };
+
+  $("exportChat").onclick = () => exportChat(chat.id);
+  $("shareThisChat").onclick = () => shareChat(chat.id);
+
+  $("deleteChat").onclick = async () => {
+    if (!confirm("Delete this chat and its messages? This cannot be undone.")) return;
+    const { error } = await db.from("messages")
+      .delete()
+      .eq("chat_id", chat.id)
+      .eq("user_id", currentUser.id);
+    if (error) return toast(error.message);
+
+    const result = await db.from("chats")
+      .delete()
+      .eq("id", chat.id)
+      .eq("user_id", currentUser.id);
+
+    if (result.error) return toast(result.error.message);
+    if (currentChatId === chat.id) {
+      currentChatId = null;
+      currentMessages = [];
+      $("topTitle").textContent = "New chat";
+      renderMessages();
+    }
+    closeModal();
+    await loadChats();
+    toast("Chat deleted.");
+  };
+}
+
+async function exportChat(id) {
+  if (!currentUser) return;
+  const { data: chat } = await db.from("chats")
+    .select("*").eq("id", id).eq("user_id", currentUser.id).single();
+  const { data: messages, error } = await db.from("messages")
+    .select("role,content,created_at")
+    .eq("chat_id", id)
+    .eq("user_id", currentUser.id)
+    .order("created_at");
+
+  if (error) return toast(error.message);
+
+  const text = "# " + (chat?.title || "QuBix chat") + "\n\n" +
+    (messages || []).map(m =>
+      "## " + (m.role === "user" ? "You" : "QuBix AI") + "\n\n" + m.content
+    ).join("\n\n---\n\n");
+
+  downloadFile(text, (chat?.title || "qubix-chat") + ".md", "text/markdown");
+}
+
+function downloadFile(content, filename, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function shareChat(id) {
+  if (!currentUser) return toast("Please sign in first.");
+
+  showModal(`
+    <h2>Share conversation</h2>
+    <p style="color:var(--muted)">Create a read-only public link to this chat.</p>
+    <div id="shareStatus" style="font-size:13px;color:var(--muted);margin:14px 0">Creating share link...</div>
+    <div class="modal-actions"><button class="secondary" id="closeShare">Close</button></div>
+  `);
+  $("closeShare").onclick = closeModal;
+
+  try {
+    const { data, error } = await db.from("qubix_shares")
+      .insert({ chat_id: id, user_id: currentUser.id })
+      .select("share_token")
+      .single();
+
+    if (error) throw error;
+
+    const link = location.origin + "/share.html?token=" + encodeURIComponent(data.share_token);
+    $("shareStatus").innerHTML = `
+      <p>Share link created:</p>
+      <input id="shareLink" value="${escapeHTML(link)}" readonly>
+      <button class="primary" id="copyShareLink">Copy link</button>
+      <p style="font-size:11px">Anyone with this link may be able to view this conversation.</p>
+    `;
+    $("copyShareLink").onclick = () => copyText(link);
+  } catch (error) {
+    $("shareStatus").textContent =
+      "Share link could not be created. Make sure the qubix_shares table and sharing SQL migration have been executed. Details: " + error.message;
+  }
+}
+
+async function loadProfile() {
+  if (!currentUser) return;
+  const { data, error } = await db.from("qubix_profiles")
+    .select("*")
+    .eq("user_id", currentUser.id)
+    .maybeSingle();
+
+  if (!error && data) profile = { ...profile, ...data };
+}
+
+async function saveProfile() {
+  if (!currentUser) return toast("Sign in to save settings.");
+
+  const values = {
+    user_id: currentUser.id,
+    preferred_language: $("languageSelect").value,
+    response_style: $("styleSelect").value,
+    custom_instructions: $("customInstructions").value,
+    updated_at: new Date().toISOString()
+  };
+
+  const { error } = await db.from("qubix_profiles")
+    .upsert(values, { onConflict: "user_id" });
+
+  if (error) return toast(error.message);
+  profile = { ...profile, ...values };
+  closeModal();
+  toast("Settings saved.");
+}
+
+function openSettings() {
+  showModal(`
+    <h2>QuBix settings</h2>
+    <label>Preferred language</label>
+    <select id="languageSelect">
+      <option value="auto">Automatic</option>
+      <option value="English">English</option>
+      <option value="Urdu">Urdu</option>
+      <option value="Roman Urdu">Roman Urdu</option>
+      <option value="Punjabi">Punjabi</option>
+      <option value="Hindi">Hindi</option>
+      <option value="Arabic">Arabic</option>
+    </select>
+    <label>Response style</label>
+    <select id="styleSelect">
+      <option value="balanced">Balanced</option>
+      <option value="concise">Short and concise</option>
+      <option value="detailed">Detailed</option>
+      <option value="friendly">Friendly</option>
+      <option value="professional">Professional</option>
+    </select>
+    <label>Custom instructions</label>
+    <textarea id="customInstructions" placeholder="Tell QuBix how you want it to respond..."></textarea>
+    <label>Appearance</label>
+    <select id="themeSelect">
+      <option value="dark">Dark</option>
+      <option value="light">Light</option>
+    </select>
+    <div class="modal-actions">
+      <button class="secondary" id="closeSettings">Cancel</button>
+      <button class="primary" id="saveSettings">Save settings</button>
+    </div>
+  `);
+
+  $("languageSelect").value = profile.preferred_language || "auto";
+  $("styleSelect").value = profile.response_style || "balanced";
+  $("customInstructions").value = profile.custom_instructions || "";
+  $("themeSelect").value = localStorage.getItem("qubix_theme") || "dark";
+
+  $("closeSettings").onclick = closeModal;
+  $("saveSettings").onclick = saveProfile;
+  $("themeSelect").onchange = e => setTheme(e.target.value);
+}
+
+function setTheme(theme) {
+  document.body.classList.toggle("light", theme === "light");
+  localStorage.setItem("qubix_theme", theme);
+}
+
+async function loadMemories() {
+  const data = await apiRequest({ action: "memory_list" });
+  memories = data.memories || [];
+  return memories;
+}
+
+async function openMemories() {
+  if (!currentUser) {
+    toast("Sign in to manage memories.");
+    setAuthScreen(true);
+    return;
   }
 
-  const response=await fetch("/api/chat",{
-   method:"POST",
-   headers:{
-    "Content-Type":"application/json",
-    "Authorization":"Bearer "+session.access_token
-   },
-   body:JSON.stringify({
-    action:"generate_image",
-    message:prompt
-   })
+  showModal(`
+    <h2>QuBix memories</h2>
+    <p style="font-size:12px;color:var(--muted)">Saved information that may help personalize future answers.</p>
+    <div id="memoryList">Loading...</div>
+    <div class="modal-actions" style="margin-top:15px">
+      <button class="secondary" id="addMemory">＋ Add memory</button>
+      <button class="secondary" id="closeMemories">Close</button>
+    </div>
+  `);
+
+  $("closeMemories").onclick = closeModal;
+  $("addMemory").onclick = addMemoryPrompt;
+
+  try {
+    await refreshMemoryList();
+  } catch (error) {
+    $("memoryList").textContent = error.message;
+  }
+}
+
+async function refreshMemoryList() {
+  await loadMemories();
+  const list = $("memoryList");
+  if (!list) return;
+
+  if (!memories.length) {
+    list.textContent = "No saved memories yet.";
+    return;
+  }
+
+  list.innerHTML = "";
+  memories.forEach(memory => {
+    const row = document.createElement("div");
+    row.style.cssText = "padding:10px 0;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:center";
+    const text = document.createElement("div");
+    text.style.cssText = "flex:1;font-size:13px";
+    text.textContent = memory.memory;
+
+    const del = document.createElement("button");
+    del.className = "secondary danger";
+    del.textContent = "Delete";
+    del.onclick = async () => {
+      if (!confirm("Delete this memory?")) return;
+      try {
+        await apiRequest({ action: "memory_delete", id: memory.id });
+        await refreshMemoryList();
+      } catch (e) { toast(e.message); }
+    };
+    row.append(text, del);
+    list.appendChild(row);
   });
+}
 
-  const data=await response.json();
+async function addMemoryPrompt() {
+  const memory = prompt("What should QuBix remember?");
+  if (!memory?.trim()) return;
 
-  if(!response.ok)throw new Error(data.error||"Image generation failed.");
+  try {
+    await apiRequest({
+      action: "memory_save",
+      memory: memory.trim(),
+      category: "general"
+    });
+    await refreshMemoryList();
+    toast("Memory saved.");
+  } catch (error) {
+    toast(error.message);
+  }
+}
 
-  const row=addBubble(data.reply||"Image generated.","assistant");
+function clearAttachment() {
+  attachedFile = null;
+  attachedText = "";
+  $("fileChip").hidden = true;
+  $("fileChip").textContent = "";
+  $("fileInput").value = "";
+}
 
-  if(data.image){
-   const img=document.createElement("img");
-   img.src=data.image;
-   img.alt=prompt;
-   img.style="max-width:100%;border-radius:12px;margin-top:10px";
-   row.querySelector(".bubble").appendChild(img);
+async function handleFile(file) {
+  if (!file) return;
+  const maxSize = 5 * 1024 * 1024;
+  if (file.size > maxSize) {
+    toast("File is too large. Maximum size is 5 MB.");
+    return;
   }
 
-  el("prompt").value="";
+  const ext = file.name.split(".").pop().toLowerCase();
+  if (!["txt", "md", "csv", "json"].includes(ext)) {
+    toast("This file type is not yet supported for text extraction. Use TXT, MD, CSV or JSON.");
+    return;
+  }
 
- }catch(error){
-  addBubble("Image error: "+error.message,"assistant");
- }finally{
-  busy=false;
-  setStatus("Ready");
- }
+  try {
+    attachedText = await file.text();
+    attachedFile = file;
+    $("fileChip").hidden = false;
+    $("fileChip").textContent = "Attached: " + file.name + " · " + Math.round(file.size / 1024) + " KB";
+    toast("File attached.");
+  } catch {
+    toast("Could not read this file.");
+  }
 }
 
-function toggleSidebar(){
- el("sidebar").classList.toggle("open");
- el("overlay").classList.toggle("show");
+async function generateImageFromPrompt(promptText) {
+  if (!currentUser) {
+    toast("Sign in to generate images.");
+    setAuthScreen(true);
+    return;
+  }
+  if (!promptText.trim()) return;
+
+  setLoading(true);
+  const userMessage = { role: "user", content: "Generate an image: " + promptText };
+  currentMessages.push(userMessage);
+  renderMessages();
+
+  try {
+    await saveMessage("user", userMessage.content);
+    const data = await apiRequest({
+      action: "generate_image",
+      prompt: promptText
+    });
+
+    if (!data.image?.data) throw new Error("No image returned.");
+
+    const mime = data.image.mimeType || "image/png";
+    const imageUrl = "data:" + mime + ";base64," + data.image.data;
+
+    const message = {
+      role: "assistant",
+      content: "Your image has been generated."
+    };
+    currentMessages.push(message);
+    await saveMessage("assistant", message.content);
+    renderMessages();
+
+    const last = $("messages").lastElementChild;
+    const image = document.createElement("img");
+    image.className = "generated-image";
+    image.src = imageUrl;
+    image.alt = "Generated image";
+
+    const download = document.createElement("a");
+    download.href = imageUrl;
+    download.download = "qubix-generated-image.png";
+    download.textContent = "Download image";
+    download.style.cssText = "display:inline-block;margin-top:8px;color:#a99cff;font-size:13px";
+
+    last.querySelector(".message-content").append(image, download);
+    $("content").scrollTop = $("content").scrollHeight;
+  } catch (error) {
+    currentMessages.pop();
+    renderMessages();
+    toast(error.message);
+  } finally {
+    setLoading(false);
+  }
 }
 
-function closeSidebar(){
- el("sidebar").classList.remove("open");
- el("overlay").classList.remove("show");
+function startVoiceInput() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    toast("Voice input is not supported in this browser.");
+    return;
+  }
+
+  const recognition = new SpeechRecognition();
+  recognition.lang = "en-US";
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+
+  $("voiceBtn").textContent = "Listening...";
+  recognition.onresult = event => {
+    const result = event.results[0][0].transcript;
+    $("messageInput").value += ($("messageInput").value ? " " : "") + result;
+    $("messageInput").dispatchEvent(new Event("input"));
+  };
+  recognition.onerror = () => toast("Voice input failed.");
+  recognition.onend = () => $("voiceBtn").textContent = "🎙 Voice";
+  recognition.start();
 }
 
-document.addEventListener("DOMContentLoaded",()=>{
- const fileInput=el("fileInput");
+async function authSubmit() {
+  const email = $("authEmail").value.trim();
+  const password = $("authPassword").value;
 
- if(fileInput){
-  fileInput.addEventListener("change",()=>{
-   readSelectedFile(fileInput.files[0]);
+  if (!email || !password) return toast("Enter email and password.");
+
+  $("authSubmit").disabled = true;
+  try {
+    if (authMode === "signup") {
+      const { data, error } = await db.auth.signUp({ email, password });
+      if (error) throw error;
+
+      if (data.session) {
+        currentSession = data.session;
+        currentUser = data.user;
+        setAuthScreen(false);
+        await afterLogin();
+      } else {
+        toast("Account created. Check your email to confirm, then sign in.");
+      }
+    } else {
+      const { data, error } = await db.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      currentSession = data.session;
+      currentUser = data.user;
+      setAuthScreen(false);
+      await afterLogin();
+    }
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    $("authSubmit").disabled = false;
+  }
+}
+
+async function afterLogin() {
+  $("userAvatar").textContent = (currentUser.email || "Q").charAt(0).toUpperCase();
+  await loadProfile();
+  await loadChats();
+  toast("Signed in successfully.");
+}
+
+async function signOut() {
+  const { error } = await db.auth.signOut();
+  if (error) return toast(error.message);
+
+  currentUser = null;
+  currentSession = null;
+  currentChatId = null;
+  currentMessages = [];
+  chats = [];
+  renderChats();
+  renderMessages();
+  $("topTitle").textContent = "New chat";
+  closeModal();
+  toast("Signed out.");
+}
+
+function openAccount() {
+  if (!currentUser) {
+    setAuthScreen(true);
+    return;
+  }
+
+  showModal(`
+    <h2>Your account</h2>
+    <p style="color:var(--muted)">${escapeHTML(currentUser.email || "")}</p>
+    <p style="font-size:12px;color:var(--muted)">Your chats and memories are associated with this account.</p>
+    <div class="modal-actions">
+      <button class="secondary" id="closeAccount">Close</button>
+      <button class="primary" id="signOutBtn">Sign out</button>
+    </div>
+  `);
+  $("closeAccount").onclick = closeModal;
+  $("signOutBtn").onclick = signOut;
+}
+
+function forgotPassword() {
+  const email = $("authEmail").value.trim();
+  if (!email) return toast("Enter your email address first.");
+
+  db.auth.resetPasswordForEmail(email, {
+    redirectTo: location.origin
+  }).then(({ error }) => {
+    if (error) toast(error.message);
+    else toast("Password reset email sent.");
   });
- }
+}
 
- init();
+/* UI events */
+$("newChatBtn").onclick = createChat;
+$("sendBtn").onclick = () => sendMessage();
+$("messageInput").addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
 });
+$("messageInput").addEventListener("input", () => {
+  const el = $("messageInput");
+  el.style.height = "auto";
+  el.style.height = Math.min(el.scrollHeight, 180) + "px";
+});
+$("chatSearch").oninput = renderChats;
+$("settingsBtn").onclick = openSettings;
+$("memoryBtn").onclick = openMemories;
+$("accountBtn").onclick = openAccount;
+$("menuBtn").onclick = () => $("sidebar").classList.toggle("open");
+$("shareBtn").onclick = () => {
+  if (currentChatId) shareChat(currentChatId);
+  else toast("Start a conversation first.");
+};
+$("attachBtn").onclick = () => $("fileInput").click();
+$("fileInput").onchange = e => handleFile(e.target.files[0]);
+$("voiceBtn").onclick = startVoiceInput;
+$("imageBtn").onclick = () => {
+  const promptText = prompt("Describe the image you want QuBix to generate:");
+  if (promptText?.trim()) generateImageFromPrompt(promptText.trim());
+};
+
+$("authSubmit").onclick = authSubmit;
+$("authSwitch").onclick = () => {
+  authMode = authMode === "signin" ? "signup" : "signin";
+  $("authTitle").textContent = authMode === "signup" ? "Create your account" : "Welcome back";
+  $("authSubmit").textContent = authMode === "signup" ? "Create account" : "Sign in";
+  $("authSwitch").textContent = authMode === "signup" ? "Back to sign in" : "Create an account";
+};
+$("forgotBtn").onclick = forgotPassword;
+$("guestBtn").onclick = () => setAuthScreen(false);
+
+document.querySelectorAll(".suggestion").forEach(button => {
+  button.onclick = () => sendMessage(button.dataset.prompt);
+});
+
+async function init() {
+  setTheme(localStorage.getItem("qubix_theme") || "dark");
+
+  const { data } = await db.auth.getSession();
+  currentSession = data.session;
+  currentUser = data.session?.user || null;
+
+  db.auth.onAuthStateChange((_event, session) => {
+    currentSession = session;
+    currentUser = session?.user || null;
+    if (currentUser) {
+      setAuthScreen(false);
+      setTimeout(afterLogin, 0);
+    } else {
+      chats = [];
+      currentChatId = null;
+      currentMessages = [];
+      renderChats();
+      renderMessages();
+    }
+  });
+
+  if (currentUser) {
+    await afterLogin();
+  } else {
+    $("userAvatar").textContent = "Q";
+    renderMessages();
+  }
+
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/sw.js").catch(err => {
+      console.warn("Service worker registration failed:", err);
+    });
+  }
+}
+
+init();
 </script>
 </body>
 </html>
