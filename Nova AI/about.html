@@ -1,42 +1,90 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>About - QuBix AI</title>
-<style>
-*{box-sizing:border-box}
-body{margin:0;padding:25px;background:#10111a;color:#eee;font-family:Arial,sans-serif;line-height:1.7}
-main{max-width:850px;margin:35px auto;background:#191b28;padding:30px;border-radius:16px}
-h1,h2{color:#a99aff}
-a{color:#a99aff}
-p{color:#c9cad5}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#080d18">
+  <title>About — QuBix AI</title>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;background:#080d18;color:#e8edf7;font-family:Arial,sans-serif;line-height:1.7}
+    header{padding:22px 7%;border-bottom:1px solid #202b40;display:flex;justify-content:space-between;align-items:center}
+    .logo{font-size:23px;font-weight:800;color:#8b9cff;text-decoration:none}
+    nav a{color:#b8c4d9;text-decoration:none;margin-left:18px;font-size:14px}
+    main{max-width:900px;margin:55px auto;padding:0 22px 70px}
+    .hero{text-align:center;padding:45px 15px 55px}
+    .hero h1{font-size:45px;margin:0 0 15px}
+    .hero h1 span{color:#9aaaff}
+    .hero p{max-width:650px;margin:auto;color:#b9c5d8;font-size:17px}
+    h2{color:#a9b8ff;margin-top:35px}
+    p{color:#c2ccdc}
+    .features{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:15px;margin-top:25px}
+    .feature{background:#111b2c;border:1px solid #263550;border-radius:15px;padding:20px}
+    .feature h3{margin:0 0 8px;color:#dce4ff}
+    .feature p{margin:0;font-size:14px}
+    .cta{margin-top:45px;padding:28px;text-align:center;border:1px solid #34446a;background:#111b2c;border-radius:18px}
+    .cta a{display:inline-block;background:#778cff;color:#081020;text-decoration:none;font-weight:bold;padding:12px 22px;border-radius:10px;margin-top:10px}
+    footer{border-top:1px solid #202b40;padding:25px;text-align:center;color:#8290a7;font-size:13px}
+    @media(max-width:600px){header{padding:18px;flex-wrap:wrap;gap:12px}nav a{margin-left:10px}.hero h1{font-size:34px}}
+  </style>
 </head>
 <body>
+<header>
+  <a class="logo" href="/">QuBix AI</a>
+  <nav>
+    <a href="/">Home</a>
+    <a href="/privacy.html">Privacy</a>
+    <a href="/terms.html">Terms</a>
+  </nav>
+</header>
+
 <main>
-<a href="/">← Back to QuBix AI</a>
-<h1>About QuBix AI</h1>
-<p>Welcome to QuBix AI — your intelligent AI assistant.</p>
+  <section class="hero">
+    <h1>Meet <span>QuBix AI</span></h1>
+    <p>A simple AI workspace designed to help you explore ideas, learn new things, solve problems, and get more done.</p>
+  </section>
 
-<h2>Our Goal</h2>
-<p>Our goal is to make AI tools accessible through a simple and useful experience.</p>
+  <h2>Our Goal</h2>
+  <p>QuBix AI aims to make AI tools easier to access through one convenient interface. Whether you are learning, writing, researching, or coding, QuBix AI gives you a place to explore your ideas and work through questions.</p>
 
-<h2>What QuBix AI Offers</h2>
-<ul>
-<li>AI-powered conversations.</li>
-<li>Multiple AI response modes.</li>
-<li>Chat history and saved conversations.</li>
-<li>Web search capabilities.</li>
-<li>Memory and personalization features.</li>
-<li>Image generation features.</li>
-</ul>
+  <h2>What You Can Do</h2>
+  <div class="features">
+    <div class="feature">
+      <h3>AI Conversations</h3>
+      <p>Ask questions and explore topics through AI-powered conversations.</p>
+    </div>
+    <div class="feature">
+      <h3>Learning Modes</h3>
+      <p>Use focused modes for study, coding, creativity, and research.</p>
+    </div>
+    <div class="feature">
+      <h3>Chat History</h3>
+      <p>Save conversations and return to them when you need them.</p>
+    </div>
+    <div class="feature">
+      <h3>Web Search</h3>
+      <p>Use available web-search features to help explore information online.</p>
+    </div>
+    <div class="feature">
+      <h3>Personal Preferences</h3>
+      <p>Customize language, response style, and instructions where supported.</p>
+    </div>
+    <div class="feature">
+      <h3>Sharing</h3>
+      <p>Create links to share conversations with other people.</p>
+    </div>
+  </div>
 
-<h2>Built to Grow</h2>
-<p>QuBix AI is continuously evolving, with the goal of adding more useful features and improving the experience.</p>
+  <h2>Built to Keep Improving</h2>
+  <p>QuBix AI is an evolving project. Features, supported models, and availability may change as the platform develops.</p>
 
-<h2>Thank You</h2>
-<p>Thank you for using QuBix AI!</p>
+  <div class="cta">
+    <h2>Ready to explore?</h2>
+    <p>Start a conversation with QuBix AI.</p>
+    <a href="/">Open QuBix AI</a>
+  </div>
 </main>
+
+<footer>© 2026 QuBix AI. All rights reserved.</footer>
 </body>
 </html>
