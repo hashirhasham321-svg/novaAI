@@ -1,3 +1,4 @@
+
 const HEADERS = {
   "Content-Type": "application/json",
   "Access-Control-Allow-Origin": "*",
@@ -7,7 +8,8 @@ const HEADERS = {
 
 const MODELS = {
   groq: "openai/gpt-oss-20b",
-  gemini: "gemini-2.5-flash"
+  gemini: "gemini-2.5-flash",
+  image: "gemini-2.5-flash-image"
 };
 
 const SYSTEM_PROMPT = `
@@ -25,16 +27,11 @@ const json = (statusCode, body) => ({
   body: JSON.stringify(body)
 });
 
-const isUUID = value =>
-  typeof value === "string" &&
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
-
-function supabaseHeaders(token, extra = {}) {
+function getSupabaseHeaders(token) {
   return {
     apikey: process.env.SUPABASE_ANON_KEY,
     Authorization: `Bearer ${token}`,
-    "Content-Type": "application/json",
-    ...extra
+    "Content-Type": "application/json"
   };
 }
 
@@ -51,6 +48,7 @@ async function callGroq(messages, apiKey, temperature = 0.7) {
         model: MODELS.groq,
         messages,
         temperature,
+        max_tokens: 4096,
         stream: false
       })
     }
@@ -65,30 +63,55 @@ async function callGroq(messages, apiKey, temperature = 0.7) {
   return data.choices?.[0]?.message?.content || "";
 }
 
-async function callGemini(messages, apiKey) {
-  const systemMessage = messages.find(m => m.role === "system");
+function prepareGeminiContents(messages) {
+  const contents = [];
 
-  const contents = messages
-    .filter(m => m.role !== "system")
-    .map(m => ({
-      role: m.role === "assistant" ? "model" : "user",
-      parts: [{ text: String(m.content || "") }]
-    }));
+  for (const message of messages) {
+    if (message.role === "system") continue;
+
+    const role = message.role === "assistant" ? "model" : "user";
+    const text = String(message.content || "");
+
+    if (!text.trim()) continue;
+
+    const previous = contents[contents.length - 1];
+
+    if (previous && previous.role === role) {
+      previous.parts[0].text += "\n\n" + text;
+    } else {
+      contents.push({
+        role,
+        parts: [{ text }]
+      });
+    }
+  }
+
+  while (contents.length && contents[0].role === "model") {
+    contents.shift();
+  }
+
+  return contents;
+}
+
+async function callGemini(messages, apiKey, systemInstruction, temperature = 0.7) {
+  const contents = prepareGeminiContents(messages);
+
+  if (!contents.length) {
+    throw new Error("No conversation content for Gemini");
+  }
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${MODELS.gemini}:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${MODELS.gemini}:generateContent?key=${encodeURIComponent(apiKey)}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         systemInstruction: {
-          parts: [{
-            text: systemMessage?.content || SYSTEM_PROMPT
-          }]
+          parts: [{ text: systemInstruction }]
         },
         contents,
         generationConfig: {
-          temperature: 0.7,
+          temperature,
           maxOutputTokens: 4096
         }
       })
@@ -145,8 +168,7 @@ async function generateImage(prompt) {
   }
 
   const response = await fetch(
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=" +
-      process.env.GEMINI_API_KEY,
+    `https://generativelanguage.googleapis.com/v1beta/models/${MODELS.image}:generateContent?key=${encodeURIComponent(process.env.GEMINI_API_KEY)}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -168,14 +190,14 @@ async function generateImage(prompt) {
   }
 
   const parts = data.candidates?.[0]?.content?.parts || [];
-  const imagePart = parts.find(p => p.inlineData?.data);
+  const imagePart = parts.find(part => part.inlineData?.data);
 
   if (!imagePart) {
     throw new Error("No image was returned");
   }
 
   return {
-    mimeType: imagePart.inlineData.mimeType,
+    mimeType: imagePart.inlineData.mimeType || "image/png",
     data: imagePart.inlineData.data
   };
 }
@@ -206,9 +228,29 @@ async function authenticate(token) {
   return response.json();
 }
 
-/* =========================
-   MEMORY FEATURES
-========================= */
+async function loadProfile(userId, token) {
+  const url = new URL(
+    `${process.env.SUPABASE_URL}/rest/v1/qubix_profiles`
+  );
+
+  url.searchParams.set(
+    "select",
+    "custom_instructions,preferred_language,response_style"
+  );
+  url.searchParams.set("user_id", `eq.${userId}`);
+  url.searchParams.set("limit", "1");
+
+  const response = await fetch(url, {
+    headers: getSupabaseHeaders(token)
+  });
+
+  if (!response.ok) {
+    throw new Error("Could not load user profile");
+  }
+
+  const rows = await response.json();
+  return rows?.[0] || {};
+}
 
 async function saveMemory(userId, memory, category, token) {
   const url = new URL(
@@ -219,9 +261,10 @@ async function saveMemory(userId, memory, category, token) {
 
   const response = await fetch(url, {
     method: "POST",
-    headers: supabaseHeaders(token, {
+    headers: {
+      ...getSupabaseHeaders(token),
       Prefer: "resolution=merge-duplicates,return=minimal"
-    }),
+    },
     body: JSON.stringify({
       user_id: userId,
       memory,
@@ -247,7 +290,7 @@ async function listMemories(userId, token) {
   url.searchParams.set("limit", "100");
 
   const response = await fetch(url, {
-    headers: supabaseHeaders(token)
+    headers: getSupabaseHeaders(token)
   });
 
   if (!response.ok) {
@@ -258,9 +301,7 @@ async function listMemories(userId, token) {
 }
 
 async function deleteMemory(id, userId, token) {
-  if (!isUUID(id)) {
-    throw new Error("Invalid memory ID");
-  }
+  if (!id) throw new Error("Memory ID is required");
 
   const url = new URL(
     `${process.env.SUPABASE_URL}/rest/v1/qubix_memories`
@@ -271,7 +312,7 @@ async function deleteMemory(id, userId, token) {
 
   const response = await fetch(url, {
     method: "DELETE",
-    headers: supabaseHeaders(token)
+    headers: getSupabaseHeaders(token)
   });
 
   if (!response.ok) {
@@ -281,101 +322,66 @@ async function deleteMemory(id, userId, token) {
   return true;
 }
 
-/* =========================
-   CHAT SHARING FEATURES
-========================= */
-
-async function createShare(chatId, userId, token) {
-  if (!isUUID(chatId)) {
-    throw new Error("Invalid chat ID");
-  }
-
-  // Check ownership before creating a public link.
-  const chatUrl = new URL(
-    `${process.env.SUPABASE_URL}/rest/v1/chats`
-  );
-
-  chatUrl.searchParams.set("select", "id");
-  chatUrl.searchParams.set("id", `eq.${chatId}`);
-  chatUrl.searchParams.set("user_id", `eq.${userId}`);
-  chatUrl.searchParams.set("limit", "1");
-
-  const chatResponse = await fetch(chatUrl, {
-    headers: supabaseHeaders(token)
-  });
-
-  if (!chatResponse.ok) {
-    throw new Error("Could not verify chat ownership");
-  }
-
-  const chats = await chatResponse.json();
-
-  if (!chats.length) {
-    throw new Error("Chat not found or access denied");
-  }
-
-  // Create share record.
-  const shareResponse = await fetch(
-    `${process.env.SUPABASE_URL}/rest/v1/qubix_shares`,
-    {
-      method: "POST",
-      headers: supabaseHeaders(token, {
-        Prefer: "return=representation"
-      }),
-      body: JSON.stringify({
-        chat_id: chatId,
-        user_id: userId
-      })
-    }
-  );
-
-  const shareData = await shareResponse.json();
-
-  if (!shareResponse.ok || !shareData?.[0]?.share_token) {
-    throw new Error("Could not create share link");
-  }
-
-  const tokenValue = shareData[0].share_token;
-  const siteUrl = process.env.URL || "https://qubixai.netlify.app";
-
-  return {
-    shareToken: tokenValue,
-    shareUrl: `${siteUrl}/share.html?token=${encodeURIComponent(tokenValue)}`
-  };
-}
-
-async function revokeShare(shareToken, userId, token) {
-  if (!isUUID(shareToken)) {
-    throw new Error("Invalid share token");
-  }
-
+async function clearMemories(userId, token) {
   const url = new URL(
-    `${process.env.SUPABASE_URL}/rest/v1/qubix_shares`
+    `${process.env.SUPABASE_URL}/rest/v1/qubix_memories`
   );
 
-  url.searchParams.set("share_token", `eq.${shareToken}`);
   url.searchParams.set("user_id", `eq.${userId}`);
 
   const response = await fetch(url, {
-    method: "PATCH",
-    headers: supabaseHeaders(token, {
-      Prefer: "return=minimal"
-    }),
-    body: JSON.stringify({
-      is_active: false
-    })
+    method: "DELETE",
+    headers: getSupabaseHeaders(token)
   });
 
   if (!response.ok) {
-    throw new Error("Could not revoke share link");
+    throw new Error("Could not clear memories");
   }
 
   return true;
 }
 
-/* =========================
-   MAIN NETLIFY FUNCTION
-========================= */
+function getModePrompt(mode) {
+  const prompts = {
+    normal: "Answer naturally and helpfully.",
+    study: "Act as a patient tutor. Explain concepts step by step and use examples.",
+    coding: "Act as an expert programmer. Give practical, correct code and explain important steps.",
+    creative: "Be creative and original while following the user's request.",
+    research: "Analyze carefully. Distinguish facts from uncertainty and use available evidence."
+  };
+
+  return prompts[mode] || prompts.normal;
+}
+
+function getProfilePrompt(profile) {
+  const parts = [];
+
+  const language = profile.preferred_language || "auto";
+  if (language !== "auto") {
+    parts.push(`Preferred response language: ${language}.`);
+  }
+
+  const styles = {
+    balanced: "Use a balanced level of detail.",
+    concise: "Keep answers short and concise unless detail is requested.",
+    detailed: "Give detailed explanations with useful examples.",
+    friendly: "Use a warm and friendly conversational style.",
+    professional: "Use a professional and clear tone."
+  };
+
+  if (profile.response_style && styles[profile.response_style]) {
+    parts.push(styles[profile.response_style]);
+  }
+
+  if (profile.custom_instructions?.trim()) {
+    parts.push(
+      "Additional user instructions:\n" +
+      profile.custom_instructions.trim().slice(0, 3000)
+    );
+  }
+
+  return parts.join("\n");
+}
 
 export default async (request) => {
   if (request.method === "OPTIONS") {
@@ -387,9 +393,7 @@ export default async (request) => {
   }
 
   if (request.method !== "POST") {
-    return json(405, {
-      error: "Method not allowed"
-    });
+    return json(405, { error: "Method not allowed" });
   }
 
   try {
@@ -408,8 +412,7 @@ export default async (request) => {
       temperature = 0.7
     } = body;
 
-    /* MEMORY ACTIONS */
-
+    // Memory actions
     if (action === "memory_list") {
       return json(200, {
         memories: await listMemories(user.id, token)
@@ -421,15 +424,11 @@ export default async (request) => {
         typeof body.memory !== "string" ||
         !body.memory.trim()
       ) {
-        return json(400, {
-          error: "Memory is required"
-        });
+        return json(400, { error: "Memory is required" });
       }
 
       if (body.memory.length > 2000) {
-        return json(413, {
-          error: "Memory is too long"
-        });
+        return json(413, { error: "Memory is too long" });
       }
 
       await saveMemory(
@@ -439,83 +438,30 @@ export default async (request) => {
         token
       );
 
-      return json(200, {
-        success: true
-      });
+      return json(200, { success: true });
     }
 
     if (action === "memory_delete") {
       await deleteMemory(body.id, user.id, token);
-
-      return json(200, {
-        success: true
-      });
+      return json(200, { success: true });
     }
 
     if (action === "memory_clear") {
-      const url = new URL(
-        `${process.env.SUPABASE_URL}/rest/v1/qubix_memories`
-      );
-
-      url.searchParams.set("user_id", `eq.${user.id}`);
-
-      const response = await fetch(url, {
-        method: "DELETE",
-        headers: supabaseHeaders(token)
-      });
-
-      if (!response.ok) {
-        throw new Error("Could not clear memories");
-      }
-
-      return json(200, {
-        success: true
-      });
+      await clearMemories(user.id, token);
+      return json(200, { success: true });
     }
 
-    /* CHAT SHARING ACTIONS */
-
-    if (action === "create_share") {
-      const result = await createShare(
-        body.chatId,
-        user.id,
-        token
-      );
-
-      return json(200, {
-        success: true,
-        ...result
-      });
-    }
-
-    if (action === "revoke_share") {
-      await revokeShare(
-        body.shareToken,
-        user.id,
-        token
-      );
-
-      return json(200, {
-        success: true
-      });
-    }
-
-    /* IMAGE GENERATION */
-
+    // Image generation
     if (action === "generate_image") {
       if (
         typeof body.prompt !== "string" ||
         !body.prompt.trim()
       ) {
-        return json(400, {
-          error: "Image prompt is required"
-        });
+        return json(400, { error: "Image prompt is required" });
       }
 
       if (body.prompt.length > 4000) {
-        return json(413, {
-          error: "Image prompt is too long"
-        });
+        return json(413, { error: "Image prompt is too long" });
       }
 
       const image = await generateImage(body.prompt.trim());
@@ -526,26 +472,27 @@ export default async (request) => {
       });
     }
 
-    /* NORMAL CHAT */
-
-    if (
-      typeof message !== "string" ||
-      !message.trim()
-    ) {
-      return json(400, {
-        error: "Message is required"
-      });
+    // Chat validation
+    if (typeof message !== "string" || !message.trim()) {
+      return json(400, { error: "Message is required" });
     }
 
     if (message.length > 30000) {
-      return json(413, {
-        error: "Message is too long"
-      });
+      return json(413, { error: "Message is too long" });
     }
 
-    /* OPTIONAL WEB SEARCH */
+    // Load user profile
+    let profile = {};
 
+    try {
+      profile = await loadProfile(user.id, token);
+    } catch (error) {
+      console.error("Profile loading error:", error.message);
+    }
+
+    // Optional web search
     let searchContext = "";
+    let webSearchUsed = false;
 
     if (webSearchEnabled) {
       try {
@@ -555,110 +502,110 @@ export default async (request) => {
 Web search results:
 ${JSON.stringify(results)}
 
-Use these results carefully.
-Do not invent sources or claim that you opened a page unless you did.
+Use these search results carefully.
+Do not invent sources or claim that you opened pages you did not open.
+If the results do not answer the question, say so.
 `;
+
+        webSearchUsed = true;
       } catch (error) {
-        console.error("QuBix web search:", error.message);
-        searchContext =
-          "Web search was unavailable for this request.";
+        console.error("Web search error:", error.message);
+        searchContext = `
+Web search was requested but is unavailable for this request.
+Do not pretend that a web search succeeded.
+`;
       }
     }
 
-    /* LOAD USER MEMORIES */
-
+    // Load saved user memories
     let memoryContext = "";
+    let memoryUsed = false;
 
     try {
       const memories = await listMemories(user.id, token);
 
-      memoryContext = memories.length
-        ? "\nUser memories:\n" +
-          memories.map(m => `- ${m.memory}`).join("\n")
-        : "";
+      if (memories.length) {
+        memoryContext =
+          "\nRelevant saved user memories:\n" +
+          memories
+            .slice(0, 30)
+            .map(item => "- " + item.memory)
+            .join("\n");
+
+        memoryUsed = true;
+      }
     } catch (error) {
-      console.error("QuBix memory loading:", error.message);
+      console.error("Memory loading error:", error.message);
     }
 
-    /* CHAT MODES */
+    const profileContext = getProfilePrompt(profile);
+    const modeContext = getModePrompt(mode);
 
-    const modePrompts = {
-      normal: "Answer naturally and helpfully.",
-      study: "Act as a patient tutor. Explain concepts step by step.",
-      coding: "Act as an expert programmer. Give practical, correct code.",
-      creative: "Be creative and original while following the request.",
-      research: "Analyze carefully and distinguish facts from uncertainty."
-    };
-
-    const selectedMode =
-      modePrompts[mode] || modePrompts.normal;
-
-    /* CONVERSATION HISTORY */
+    const systemInstruction = [
+      SYSTEM_PROMPT,
+      modeContext,
+      profileContext,
+      memoryContext,
+      searchContext
+    ].filter(Boolean).join("\n\n");
 
     const conversation = Array.isArray(messages)
-      ? messages.slice(-20).map(m => ({
-          role: m.role === "assistant"
-            ? "assistant"
-            : "user",
-          content: String(m.content || "").slice(0, 12000)
+      ? messages.slice(-20).map(item => ({
+          role: item.role === "assistant" ? "assistant" : "user",
+          content: String(item.content || "").slice(0, 12000)
         }))
       : [];
-
-    conversation.push({
-      role: "user",
-      content: message.trim()
-    });
 
     const fullMessages = [
       {
         role: "system",
-        content:
-          SYSTEM_PROMPT +
-          "\n" + selectedMode +
-          memoryContext +
-          searchContext
+        content: systemInstruction
       },
-      ...conversation
+      ...conversation,
+      {
+        role: "user",
+        content: message
+      }
     ];
 
-    /* GROQ PRIMARY, GEMINI FALLBACK */
+    const safeTemperature = Math.min(
+      1.5,
+      Math.max(0, Number(temperature) || 0.7)
+    );
 
     let answer = "";
     let provider = "groq";
+    let groqErrorMessage = "";
 
+    // Groq primary, Gemini fallback
     try {
       if (!process.env.GROQ_API_KEY) {
         throw new Error("Groq API key missing");
       }
-
-      const safeTemperature = Math.min(
-        1.5,
-        Math.max(
-          0,
-          Number.isFinite(Number(temperature))
-            ? Number(temperature)
-            : 0.7
-        )
-      );
 
       answer = await callGroq(
         fullMessages,
         process.env.GROQ_API_KEY,
         safeTemperature
       );
-
-    } catch (groqError) {
-      console.error("Groq failed; trying Gemini:", groqError.message);
+    } catch (error) {
+      groqErrorMessage = error.message;
+      console.error("Groq error:", groqErrorMessage);
 
       if (!process.env.GEMINI_API_KEY) {
-        throw groqError;
+        throw new Error(
+          "Groq failed and Gemini API key is missing: " +
+          groqErrorMessage
+        );
       }
 
       provider = "gemini";
 
       answer = await callGemini(
         fullMessages,
-        process.env.GEMINI_API_KEY
+        process.env.GEMINI_API_KEY,
+        systemInstruction,
+        safeTemperature
       );
     }
 
@@ -670,8 +617,9 @@ Do not invent sources or claim that you opened a page unless you did.
       success: true,
       answer,
       provider,
-      memoryUsed: Boolean(memoryContext),
-      webSearchUsed: Boolean(searchContext)
+      memoryUsed,
+      webSearchUsed,
+      profileUsed: Boolean(profileContext)
     });
 
   } catch (error) {
@@ -683,10 +631,7 @@ Do not invent sources or claim that you opened a page unless you did.
       message.includes("Authentication") ||
       message.includes("session")
         ? 401
-        : message.includes("Invalid") ||
-          message.includes("required")
-          ? 400
-          : 500;
+        : 500;
 
     return json(statusCode, {
       error: message
