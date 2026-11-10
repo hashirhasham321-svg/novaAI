@@ -170,7 +170,7 @@ body.light .message-content pre{background:#f0f1f6;color:#202234}
         <textarea id="messageInput" rows="1" placeholder="Message QuBix AI..."></textarea>
         <div class="composer-tools">
           <button class="tool-btn" id="attachBtn" title="Attach a text file">＋ Attach</button>
-          <input id="fileInput" type="file" hidden accept=".txt,.md,.csv,.json,.pdf,.docx,.png,.jpg,.jpeg,.webp">
+          <input id="fileInput" type="file" hidden accept=".txt,.md,.csv,.json">
           <button class="tool-btn" id="imageBtn" title="Generate an image">▧ Image</button>
           <button class="tool-btn" id="voiceBtn" title="Voice input">🎙 Voice</button>
           <label class="toggle"><input type="checkbox" id="webToggle"> Web search</label>
@@ -588,7 +588,7 @@ async function sendMessage(forcedMessage = null) {
 }
 
 async function regenerateAnswer(index) {
-  if (isSending || !currentUser) return;
+  if (isSending || !currentUser || !currentChatId) return;
 
   const target = currentMessages[index];
   if (!target || target.role !== "assistant") return;
@@ -597,12 +597,38 @@ async function regenerateAnswer(index) {
   while (userIndex >= 0 && currentMessages[userIndex].role !== "user") userIndex--;
   if (userIndex < 0) return;
 
+  const chatId = currentChatId;
   const userMessage = currentMessages[userIndex].content;
-  currentMessages = currentMessages.slice(0, index);
-  renderMessages();
+  const oldVisibleMessages = currentMessages.slice(0, index);
+
   setLoading(true);
+  currentMessages = oldVisibleMessages;
+  renderMessages();
 
   try {
+    // Remove the previous answer from the database before generating a replacement.
+    const { data: oldRows, error: findError } = await db
+      .from("messages")
+      .select("id")
+      .eq("chat_id", chatId)
+      .eq("user_id", currentUser.id)
+      .eq("role", "assistant")
+      .eq("content", target.content)
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (findError) throw findError;
+
+    if (oldRows && oldRows.length) {
+      const { error: deleteError } = await db
+        .from("messages")
+        .delete()
+        .eq("id", oldRows[0].id)
+        .eq("chat_id", chatId)
+        .eq("user_id", currentUser.id);
+      if (deleteError) throw deleteError;
+    }
+
     const data = await apiRequest({
       message: userMessage,
       messages: currentMessages.slice(0, -1).slice(-20),
@@ -615,8 +641,10 @@ async function regenerateAnswer(index) {
     currentMessages.push({ role: "assistant", content: answer });
     await saveMessage("assistant", answer);
     renderMessages();
+    await loadChats();
   } catch (error) {
-    toast(error.message);
+    toast(error.message || "Could not regenerate answer.");
+    await openChat(chatId);
   } finally {
     setLoading(false);
   }
@@ -735,32 +763,93 @@ async function shareChat(id) {
 
   showModal(`
     <h2>Share conversation</h2>
-    <p style="color:var(--muted)">Create a read-only public link to this chat.</p>
-    <div id="shareStatus" style="font-size:13px;color:var(--muted);margin:14px 0">Creating share link...</div>
-    <div class="modal-actions"><button class="secondary" id="closeShare">Close</button></div>
+    <p style="color:var(--muted)">Create a read-only public link or manage existing links.</p>
+    <button class="primary" id="createShareLink" style="width:100%">＋ Create new share link</button>
+    <div id="shareStatus" style="margin-top:18px">Loading links...</div>
+    <div class="modal-actions" style="margin-top:15px"><button class="secondary" id="closeShare">Close</button></div>
   `);
+
   $("closeShare").onclick = closeModal;
 
-  try {
-    const { data, error } = await db.from("qubix_shares")
-      .insert({ chat_id: id, user_id: currentUser.id })
-      .select("share_token")
-      .single();
+  async function refreshLinks() {
+    const status = $("shareStatus");
+    if (!status) return;
+    status.textContent = "Loading links...";
 
-    if (error) throw error;
+    const { data, error } = await db
+      .from("qubix_shares")
+      .select("id,share_token,created_at")
+      .eq("chat_id", id)
+      .eq("user_id", currentUser.id)
+      .order("created_at", { ascending: false });
 
-    const link = location.origin + "/share.html?token=" + encodeURIComponent(data.share_token);
-    $("shareStatus").innerHTML = `
-      <p>Share link created:</p>
-      <input id="shareLink" value="${escapeHTML(link)}" readonly>
-      <button class="primary" id="copyShareLink">Copy link</button>
-      <p style="font-size:11px">Anyone with this link may be able to view this conversation.</p>
-    `;
-    $("copyShareLink").onclick = () => copyText(link);
-  } catch (error) {
-    $("shareStatus").textContent =
-      "Share link could not be created. Make sure the qubix_shares table and sharing SQL migration have been executed. Details: " + error.message;
+    if (error) {
+      status.textContent = "Could not load links: " + error.message;
+      return;
+    }
+
+    status.innerHTML = "";
+    if (!data || !data.length) {
+      status.textContent = "No share links created yet.";
+      return;
+    }
+
+    data.forEach(share => {
+      const row = document.createElement("div");
+      row.style.cssText = "padding:12px 0;border-bottom:1px solid var(--line)";
+
+      const link = location.origin + "/share.html?token=" + encodeURIComponent(share.share_token);
+      const input = document.createElement("input");
+      input.value = link;
+      input.readOnly = true;
+      input.style.width = "100%";
+
+      const copy = document.createElement("button");
+      copy.className = "secondary";
+      copy.textContent = "Copy link";
+      copy.onclick = () => copyText(link);
+
+      const revoke = document.createElement("button");
+      revoke.className = "secondary danger";
+      revoke.textContent = "Revoke link";
+      revoke.onclick = async () => {
+        if (!confirm("Revoke this public link?")) return;
+        const { error: deleteError } = await db
+          .from("qubix_shares")
+          .delete()
+          .eq("id", share.id)
+          .eq("user_id", currentUser.id);
+        if (deleteError) return toast(deleteError.message);
+        toast("Share link revoked.");
+        await refreshLinks();
+      };
+
+      row.append(input, copy, revoke);
+      status.appendChild(row);
+    });
   }
+
+  $("createShareLink").onclick = async () => {
+    const button = $("createShareLink");
+    button.disabled = true;
+    button.textContent = "Creating...";
+    try {
+      const { error } = await db.from("qubix_shares").insert({
+        chat_id: id,
+        user_id: currentUser.id
+      });
+      if (error) throw error;
+      toast("Share link created.");
+      await refreshLinks();
+    } catch (error) {
+      toast("Could not create link: " + error.message);
+    } finally {
+      button.disabled = false;
+      button.textContent = "＋ Create new share link";
+    }
+  };
+
+  await refreshLinks();
 }
 
 async function loadProfile() {
@@ -806,6 +895,15 @@ function openSettings() {
       <option value="Hindi">Hindi</option>
       <option value="Arabic">Arabic</option>
     </select>
+    <label>Voice input language</label>
+    <select id="voiceLanguageSelect">
+      <option value="en-US">English (US)</option>
+      <option value="en-GB">English (UK)</option>
+      <option value="ur-PK">Urdu</option>
+      <option value="hi-IN">Hindi</option>
+      <option value="pa-IN">Punjabi (India)</option>
+      <option value="ar-SA">Arabic</option>
+    </select>
     <label>Response style</label>
     <select id="styleSelect">
       <option value="balanced">Balanced</option>
@@ -828,6 +926,10 @@ function openSettings() {
   `);
 
   $("languageSelect").value = profile.preferred_language || "auto";
+  $("voiceLanguageSelect").value = localStorage.getItem("qubix_voice_language") || "en-US";
+  $("voiceLanguageSelect").onchange = e => {
+    localStorage.setItem("qubix_voice_language", e.target.value);
+  };
   $("styleSelect").value = profile.response_style || "balanced";
   $("customInstructions").value = profile.custom_instructions || "";
   $("themeSelect").value = localStorage.getItem("qubix_theme") || "dark";
@@ -1022,19 +1124,39 @@ function startVoiceInput() {
   }
 
   const recognition = new SpeechRecognition();
-  recognition.lang = "en-US";
-  recognition.interimResults = false;
+  recognition.lang = localStorage.getItem("qubix_voice_language") || "en-US";
+  recognition.interimResults = true;
   recognition.maxAlternatives = 1;
 
-  $("voiceBtn").textContent = "Listening...";
+  const button = $("voiceBtn");
+  const originalText = button.textContent;
+  button.textContent = "Listening...";
+  button.disabled = true;
+
   recognition.onresult = event => {
-    const result = event.results[0][0].transcript;
-    $("messageInput").value += ($("messageInput").value ? " " : "") + result;
-    $("messageInput").dispatchEvent(new Event("input"));
+    let transcript = "";
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      transcript += event.results[i][0].transcript;
+    }
+    if (transcript) {
+      $("messageInput").value = transcript;
+      $("messageInput").dispatchEvent(new Event("input"));
+    }
   };
-  recognition.onerror = () => toast("Voice input failed.");
-  recognition.onend = () => $("voiceBtn").textContent = "🎙 Voice";
-  recognition.start();
+
+  recognition.onerror = event => toast("Voice input error: " + event.error);
+  recognition.onend = () => {
+    button.textContent = originalText;
+    button.disabled = false;
+  };
+
+  try {
+    recognition.start();
+  } catch (error) {
+    button.textContent = originalText;
+    button.disabled = false;
+    toast("Could not start voice input.");
+  }
 }
 
 async function authSubmit() {
@@ -1053,7 +1175,6 @@ async function authSubmit() {
         currentSession = data.session;
         currentUser = data.user;
         setAuthScreen(false);
-        await afterLogin();
       } else {
         toast("Account created. Check your email to confirm, then sign in.");
       }
@@ -1063,7 +1184,6 @@ async function authSubmit() {
       currentSession = data.session;
       currentUser = data.user;
       setAuthScreen(false);
-      await afterLogin();
     }
   } catch (error) {
     toast(error.message);
@@ -1153,7 +1273,7 @@ $("attachBtn").onclick = () => $("fileInput").click();
 $("fileInput").onchange = e => handleFile(e.target.files[0]);
 $("voiceBtn").onclick = startVoiceInput;
 $("imageBtn").onclick = () => {
-  const promptText = prompt("Describe the image you want QuBix to generate:");
+  const promptText = prompt("Describe the image you want QuBix AI to generate:");
   if (promptText?.trim()) generateImageFromPrompt(promptText.trim());
 };
 
