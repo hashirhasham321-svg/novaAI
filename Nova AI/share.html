@@ -3,116 +3,269 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#10111a">
 <title>Shared conversation — QuBix AI</title>
-<style>
-*{box-sizing:border-box}
-body{margin:0;background:#10111a;color:#f4f5fb;font-family:Arial,sans-serif}
-header{height:65px;border-bottom:1px solid #303449;display:flex;align-items:center;padding:0 22px;gap:12px}
-.logo{width:37px;height:37px;border-radius:12px;background:linear-gradient(135deg,#a08cff,#5e4be0);display:grid;place-items:center;font-weight:bold;font-size:20px}
-.brand{font-size:21px;font-weight:bold}
-.tag{margin-left:auto;color:#a9a5c7;font-size:12px}
-main{max-width:850px;margin:35px auto;padding:0 18px}
-h1{font-size:25px;overflow-wrap:anywhere}
-#status{color:#aaaec0;text-align:center;margin-top:100px}
-.message{display:flex;gap:13px;margin:25px 0;line-height:1.7}
-.avatar{height:34px;width:34px;flex-shrink:0;border-radius:10px;background:#282b40;display:grid;place-items:center;font-weight:bold}
-.content{flex:1;min-width:0;overflow-wrap:anywhere}
-.content pre{background:#090a11;border:1px solid #303449;padding:15px;border-radius:12px;overflow:auto}
-.content code{font-family:Consolas,monospace}
-.content blockquote{border-left:3px solid #8b78ff;padding-left:13px;color:#c4c5d2}
-.content img{max-width:100%;border-radius:12px}
-footer{text-align:center;color:#777b90;font-size:12px;padding:35px}
-</style>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
+<style>
+:root {
+  color-scheme: dark;
+  --bg:#10111a;
+  --panel:#171923;
+  --panel2:#202331;
+  --text:#f4f5fa;
+  --muted:#9ba0b2;
+  --line:#2b2e3d;
+  --accent:#8b7cff;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:Inter,Arial,sans-serif;
+  min-height:100vh;
+}
+header{
+  height:65px;
+  border-bottom:1px solid var(--line);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:0 22px;
+}
+.brand{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  font-size:20px;
+  font-weight:800;
+}
+.logo{
+  width:35px;
+  height:35px;
+  border-radius:11px;
+  background:linear-gradient(135deg,#a28cff,#5c50e8);
+  display:grid;
+  place-items:center;
+}
+header a{
+  color:#b5aaff;
+  text-decoration:none;
+  font-size:13px;
+}
+.container{
+  max-width:850px;
+  margin:35px auto;
+  padding:0 18px 60px;
+}
+.notice{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:13px 16px;
+  color:var(--muted);
+  font-size:12px;
+  margin-bottom:22px;
+}
+h1{
+  font-size:26px;
+  overflow-wrap:anywhere;
+  margin:0 0 22px;
+}
+.message{
+  display:flex;
+  gap:12px;
+  margin:25px 0;
+}
+.avatar{
+  width:32px;
+  height:32px;
+  border-radius:10px;
+  background:var(--panel2);
+  display:grid;
+  place-items:center;
+  flex-shrink:0;
+  font-size:13px;
+}
+.user .avatar{background:var(--accent)}
+.body{min-width:0;flex:1}
+.role{
+  color:var(--muted);
+  font-size:12px;
+  margin-bottom:7px;
+}
+.content{
+  line-height:1.75;
+  font-size:14px;
+  overflow-wrap:anywhere;
+}
+.content p{margin:6px 0 13px}
+.content pre{
+  background:#090a10;
+  border:1px solid var(--line);
+  border-radius:10px;
+  padding:14px;
+  overflow:auto;
+}
+.content code{font-family:Consolas,monospace;font-size:13px}
+.content :not(pre)>code{
+  background:var(--panel2);
+  padding:2px 5px;
+  border-radius:5px;
+}
+.content img{max-width:100%;border-radius:10px}
+.content a{color:#b5aaff}
+.content blockquote{
+  border-left:3px solid var(--accent);
+  padding-left:12px;
+  color:var(--muted);
+}
+.status{
+  text-align:center;
+  color:var(--muted);
+  padding:60px 15px;
+}
+.error{color:#ff8585}
+footer{
+  text-align:center;
+  border-top:1px solid var(--line);
+  padding:20px;
+  color:var(--muted);
+  font-size:11px;
+}
+@media(max-width:600px){
+  header{padding:0 13px}
+  .container{margin:24px auto;padding:0 13px 40px}
+  h1{font-size:21px}
+}
+</style>
 </head>
 <body>
 <header>
- <div class="logo">Q</div>
- <div class="brand">QuBix AI</div>
- <div class="tag">Shared conversation</div>
+  <div class="brand"><div class="logo">Q</div>QuBix AI</div>
+  <a href="/">Open QuBix AI ↗</a>
 </header>
-<main>
- <h1 id="title">Shared chat</h1>
- <div id="status">Loading conversation...</div>
- <div id="messages"></div>
+
+<main class="container">
+  <div class="notice">
+    <strong>Shared conversation</strong><br>
+    This is a read-only link. You cannot send messages or change the original conversation.
+  </div>
+
+  <div id="status" class="status">Loading shared conversation...</div>
+  <h1 id="chatTitle" hidden></h1>
+  <section id="messages"></section>
 </main>
+
 <footer>Shared using QuBix AI</footer>
 
 <script>
+"use strict";
+
 const SUPABASE_URL = "https://tehtdnaziyjwuacfxzsk.supabase.co";
-const SUPABASE_ANON_KEY = "sb_publishable_k50vs5oP1POySSKevkaSYw_fgPn7O_T";
+const SUPABASE_KEY = "sb_publishable_k50vs5oP1POySSKevkaSYw_fgPn7O_T";
+
+const db = window.supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_KEY
+);
+
+marked.setOptions({
+  breaks: true,
+  gfm: true
+});
+
+function safeMarkdown(text) {
+  return DOMPurify.sanitize(marked.parse(String(text || "")), {
+    USE_PROFILES: { html: true }
+  });
+}
+
+function showError(message) {
+  const status = document.getElementById("status");
+  status.className = "status error";
+  status.textContent = message;
+}
+
+function renderMessages(messages) {
+  const container = document.getElementById("messages");
+  container.innerHTML = "";
+
+  for (const message of messages) {
+    const article = document.createElement("article");
+    article.className = "message " +
+      (message.role === "user" ? "user" : "assistant");
+
+    const avatar = document.createElement("div");
+    avatar.className = "avatar";
+    avatar.textContent = message.role === "user" ? "U" : "Q";
+
+    const body = document.createElement("div");
+    body.className = "body";
+
+    const role = document.createElement("div");
+    role.className = "role";
+    role.textContent =
+      message.role === "user" ? "You" : "QuBix AI";
+
+    const content = document.createElement("div");
+    content.className = "content";
+    content.innerHTML = safeMarkdown(message.content);
+
+    body.append(role, content);
+    article.append(avatar, body);
+    container.appendChild(article);
+  }
+}
 
 async function loadSharedChat() {
-  const token = new URLSearchParams(location.search).get("token");
-  const status = document.getElementById("status");
+  const params = new URLSearchParams(location.search);
+  const token = params.get("token");
 
-  if (!token) {
-    status.textContent = "This share link is invalid.";
-    return;
-  }
-
-  if (!/^[0-9a-f-]{36}$/i.test(token)) {
-    status.textContent = "Invalid share token.";
+  if (!token || token.length > 200) {
+    showError("This sharing link is invalid or incomplete.");
     return;
   }
 
   try {
-    const client = window.supabase.createClient(
-      SUPABASE_URL,
-      SUPABASE_ANON_KEY
-    );
-
-    const { data, error } = await client.rpc(
+    const { data, error } = await db.rpc(
       "qubix_get_shared_chat",
       { p_token: token }
     );
 
     if (error) throw error;
-    if (!data) {
-      status.textContent = "This shared conversation is unavailable or has been removed.";
+
+    if (!data || !Array.isArray(data.messages)) {
+      showError("This conversation could not be found. The link may have expired or been removed.");
       return;
     }
 
-    document.getElementById("title").textContent =
-      data.title || "Shared conversation";
+    document.getElementById("status").hidden = true;
 
-    const messages = data.messages || [];
-    const container = document.getElementById("messages");
-    container.innerHTML = "";
+    const title = document.getElementById("chatTitle");
+    title.textContent = data.title || "Shared conversation";
+    title.hidden = false;
 
-    if (!messages.length) {
-      status.textContent = "This conversation has no messages.";
-      return;
+    renderMessages(data.messages);
+
+    if (!data.messages.length) {
+      const empty = document.createElement("div");
+      empty.className = "status";
+      empty.textContent = "This conversation has no messages.";
+      document.getElementById("messages").appendChild(empty);
     }
 
-    status.remove();
-
-    messages.forEach(message => {
-      const wrapper = document.createElement("div");
-      wrapper.className = "message";
-
-      const avatar = document.createElement("div");
-      avatar.className = "avatar";
-      avatar.textContent =
-        message.role === "assistant" ? "Q" : "U";
-
-      const content = document.createElement("div");
-      content.className = "content";
-      content.innerHTML = DOMPurify.sanitize(
-        marked.parse(message.content || "")
-      );
-
-      wrapper.append(avatar, content);
-      container.appendChild(wrapper);
-    });
+    document.title = (data.title || "Shared conversation") +
+      " — QuBix AI";
 
   } catch (error) {
-    console.error(error);
-    status.textContent = "Could not load this conversation.";
+    console.error("Shared chat error:", error);
+    showError("Unable to load this shared conversation. Please check the link or try again later.");
   }
 }
 
