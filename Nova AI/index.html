@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -49,7 +50,12 @@ select,.select{background:var(--panel);border:1px solid var(--line);border-radiu
 .content{flex:1;overflow-y:auto;padding:25px 20px 150px}
 .welcome{max-width:760px;margin:10vh auto 0;text-align:center}
 .welcome h1{font-size:clamp(28px,5vw,43px);margin:0 0 12px}
-.gradient{background:linear-gradient(90deg,#a58cff,#62c6ff);background-clip:text;color:transparent}
+.gradient,.gradient-text{
+  background:linear-gradient(90deg,#a58cff,#62c6ff);
+  background-clip:text;
+  -webkit-background-clip:text;
+  color:transparent;
+}
 .welcome p{color:var(--muted);line-height:1.7}
 .suggestions{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:32px;text-align:left}
 .suggestion{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:16px;cursor:pointer;color:var(--text)}
@@ -82,11 +88,13 @@ select,.select{background:var(--panel);border:1px solid var(--line);border-radiu
 .tool-btn.active{color:#b3a7ff}
 .send-btn{margin-left:auto;background:var(--accent2);color:white;border:0;border-radius:10px;padding:9px 15px;font-weight:600}
 .send-btn:disabled{opacity:.45;cursor:not-allowed}
+.install-btn{background:var(--accent2);color:white;border:0;border-radius:9px;padding:8px 12px;font-size:12px;font-weight:600}
+.install-btn:hover{filter:brightness(1.12)}
 .disclaimer{text-align:center;color:var(--muted);font-size:10px;margin-top:8px}
 .toggle{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
 .toggle input{accent-color:var(--accent)}
 .toast{position:fixed;bottom:105px;left:50%;transform:translateX(-50%);background:#292d3d;border:1px solid var(--line);padding:11px 16px;border-radius:10px;z-index:1000;display:none;font-size:13px;box-shadow:var(--shadow)}
-.modal-backdrop{position:fixed;inset:0;background:#0009;display:none;align-items:center;justify-content:center;z-index:100; padding:15px}
+.modal-backdrop{position:fixed;inset:0;background:#0009;display:none;align-items:center;justify-content:center;z-index:100;padding:15px}
 .modal{width:min(520px,100%);max-height:85vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:17px;padding:22px;box-shadow:var(--shadow)}
 .modal h2{margin-top:0}
 .modal input,.modal textarea,.modal select{width:100%;padding:11px;margin:7px 0 14px;background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:9px}
@@ -145,6 +153,7 @@ body.light .message-content pre{background:#f0f1f6;color:#202234}
           <option value="creative">🎨 Creative</option>
           <option value="research">🔎 Research</option>
         </select>
+        <button class="install-btn" id="installBtn" type="button">↓ Install</button>
         <button class="icon-btn" id="shareBtn" title="Share chat">↗</button>
         <div class="user-dot" id="userAvatar">Q</div>
       </div>
@@ -170,7 +179,7 @@ body.light .message-content pre{background:#f0f1f6;color:#202234}
         <textarea id="messageInput" rows="1" placeholder="Message QuBix AI..."></textarea>
         <div class="composer-tools">
           <button class="tool-btn" id="attachBtn" title="Attach a text file">＋ Attach</button>
-          <input id="fileInput" type="file" hidden accept=".txt,.md,.csv,.json">
+          <input id="fileInput" type="file" hidden accept=".txt,.md,.csv,.json,.pdf,.docx,.png,.jpg,.jpeg,.webp">
           <button class="tool-btn" id="imageBtn" title="Generate an image">▧ Image</button>
           <button class="tool-btn" id="voiceBtn" title="Voice input">🎙 Voice</button>
           <label class="toggle"><input type="checkbox" id="webToggle"> Web search</label>
@@ -183,7 +192,6 @@ body.light .message-content pre{background:#f0f1f6;color:#202234}
 </div>
 
 <div class="toast" id="toast"></div>
-
 <div class="modal-backdrop" id="modalBackdrop">
   <div class="modal" id="modal"></div>
 </div>
@@ -204,6 +212,42 @@ body.light .message-content pre{background:#f0f1f6;color:#202234}
 
 <script>
 "use strict";
+
+/* PWA install support */
+let deferredInstallPrompt = null;
+
+window.addEventListener("beforeinstallprompt", event => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  $("installBtn").textContent = "↓ Install";
+});
+
+window.addEventListener("appinstalled", () => {
+  deferredInstallPrompt = null;
+  $("installBtn").textContent = "Installed";
+  $("installBtn").disabled = true;
+  toast("QuBix AI installed successfully!");
+});
+
+$("installBtn").addEventListener("click", async () => {
+  if (deferredInstallPrompt) {
+    deferredInstallPrompt.prompt();
+    const result = await deferredInstallPrompt.userChoice;
+    if (result.outcome === "accepted") {
+      $("installBtn").textContent = "Installing...";
+    }
+    deferredInstallPrompt = null;
+    return;
+  }
+
+  if (window.matchMedia("(display-mode: standalone)").matches ||
+      window.navigator.standalone === true) {
+    toast("QuBix is already installed.");
+    return;
+  }
+
+  toast("Install not available here. Open your browser menu and choose Install app or Add to Home screen.");
+});
 
 /* QuBix configuration */
 const SUPABASE_URL = "https://tehtdnaziyjwuacfxzsk.supabase.co";
@@ -229,10 +273,7 @@ let profile = {
   custom_instructions: ""
 };
 
-marked.setOptions({
-  breaks: true,
-  gfm: true
-});
+marked.setOptions({breaks:true,gfm:true});
 
 function toast(message) {
   const el = $("toast");
@@ -244,15 +285,12 @@ function toast(message) {
 
 function safeMarkdown(text) {
   const html = marked.parse(String(text || ""));
-  return DOMPurify.sanitize(html, {
-    USE_PROFILES: { html: true },
-    ADD_ATTR: ["target", "rel"]
-  });
+  return DOMPurify.sanitize(html,{USE_PROFILES:{html:true},ADD_ATTR:["target","rel"]});
 }
 
 function escapeHTML(value) {
-  return String(value ?? "").replace(/[&<>"']/g, c => ({
-    "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
+  return String(value ?? "").replace(/[&<>"']/g,c=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
   }[c]));
 }
 
@@ -266,8 +304,8 @@ function closeModal() {
   $("modal").innerHTML = "";
 }
 
-$("modalBackdrop").addEventListener("click", e => {
-  if (e.target === $("modalBackdrop")) closeModal();
+$("modalBackdrop").addEventListener("click",e=>{
+  if(e.target===$("modalBackdrop")) closeModal();
 });
 
 function setAuthScreen(show) {
@@ -275,312 +313,297 @@ function setAuthScreen(show) {
 }
 
 async function getToken() {
-  if (!currentSession) return null;
+  if(!currentSession) return null;
   return currentSession.access_token;
 }
 
 async function apiRequest(payload) {
   const token = await getToken();
-  if (!token) throw new Error("Please sign in first.");
+  if(!token) throw new Error("Please sign in first.");
 
-  const response = await fetch(API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": "Bearer " + token
+  const response = await fetch(API_URL,{
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json",
+      "Authorization":"Bearer "+token
     },
-    body: JSON.stringify(payload)
+    body:JSON.stringify(payload)
   });
 
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || "Request failed.");
+  const data = await response.json().catch(()=>({}));
+  if(!response.ok) throw new Error(data.error||"Request failed.");
   return data;
 }
 
 function setLoading(value) {
-  isSending = value;
-  $("sendBtn").disabled = value;
-  $("sendBtn").textContent = value ? "Working..." : "Send ↑";
+  isSending=value;
+  $("sendBtn").disabled=value;
+  $("sendBtn").textContent=value?"Working...":"Send ↑";
 }
 
 function showWelcome(show) {
-  $("welcome").style.display = show ? "block" : "none";
+  $("welcome").style.display=show?"block":"none";
 }
 
-function renderMessage(message, index) {
-  const isUser = message.role === "user";
-  const content = safeMarkdown(message.content || "");
-  const wrapper = document.createElement("article");
-  wrapper.className = "message " + (isUser ? "user" : "assistant");
+function renderMessage(message,index) {
+  const isUser=message.role==="user";
+  const content=safeMarkdown(message.content||"");
+  const wrapper=document.createElement("article");
+  wrapper.className="message "+(isUser?"user":"assistant");
 
-  const avatar = document.createElement("div");
-  avatar.className = "avatar";
-  avatar.textContent = isUser ? "U" : "Q";
+  const avatar=document.createElement("div");
+  avatar.className="avatar";
+  avatar.textContent=isUser?"U":"Q";
 
-  const body = document.createElement("div");
-  body.className = "message-body";
-  const role = document.createElement("div");
-  role.className = "message-role";
-  role.textContent = isUser ? "You" : "QuBix AI";
+  const body=document.createElement("div");
+  body.className="message-body";
+  const role=document.createElement("div");
+  role.className="message-role";
+  role.textContent=isUser?"You":"QuBix AI";
 
-  const text = document.createElement("div");
-  text.className = "message-content";
-  text.innerHTML = content;
+  const text=document.createElement("div");
+  text.className="message-content";
+  text.innerHTML=content;
 
-  const actions = document.createElement("div");
-  actions.className = "message-actions";
+  const actions=document.createElement("div");
+  actions.className="message-actions";
 
-  const copy = document.createElement("button");
-  copy.textContent = "Copy";
-  copy.onclick = () => copyText(message.content || "");
+  const copy=document.createElement("button");
+  copy.textContent="Copy";
+  copy.onclick=()=>copyText(message.content||"");
   actions.appendChild(copy);
 
-  if (!isUser) {
-    const regenerate = document.createElement("button");
-    regenerate.textContent = "Regenerate";
-    regenerate.onclick = () => regenerateAnswer(index);
+  if(!isUser) {
+    const regenerate=document.createElement("button");
+    regenerate.textContent="Regenerate";
+    regenerate.onclick=()=>regenerateAnswer(index);
     actions.appendChild(regenerate);
 
-    const good = document.createElement("button");
-    good.textContent = "👍";
-    good.onclick = () => toast("Thanks for your feedback!");
+    const good=document.createElement("button");
+    good.textContent="👍";
+    good.onclick=()=>toast("Thanks for your feedback!");
     actions.appendChild(good);
 
-    const bad = document.createElement("button");
-    bad.textContent = "👎";
-    bad.onclick = () => toast("Feedback noted.");
+    const bad=document.createElement("button");
+    bad.textContent="👎";
+    bad.onclick=()=>toast("Feedback noted.");
     actions.appendChild(bad);
   }
 
-  body.append(role, text, actions);
-  wrapper.append(avatar, body);
+  body.append(role,text,actions);
+  wrapper.append(avatar,body);
   $("messages").appendChild(wrapper);
 }
 
 function renderMessages() {
-  $("messages").innerHTML = "";
-  showWelcome(currentMessages.length === 0);
-  currentMessages.forEach((m, i) => renderMessage(m, i));
-  $("content").scrollTop = $("content").scrollHeight;
+  $("messages").innerHTML="";
+  showWelcome(currentMessages.length===0);
+  currentMessages.forEach((m,i)=>renderMessage(m,i));
+  $("content").scrollTop=$("content").scrollHeight;
 }
 
 function renderChats() {
-  const query = $("chatSearch").value.toLowerCase().trim();
-  $("chatList").innerHTML = "";
+  const query=$("chatSearch").value.toLowerCase().trim();
+  $("chatList").innerHTML="";
+  const filtered=chats.filter(c=>String(c.title||"New chat").toLowerCase().includes(query));
 
-  const filtered = chats.filter(c =>
-    String(c.title || "New chat").toLowerCase().includes(query)
-  );
+  filtered.forEach(chat=>{
+    const item=document.createElement("div");
+    item.className="chat-item"+(chat.id===currentChatId?" active":"");
 
-  filtered.forEach(chat => {
-    const item = document.createElement("div");
-    item.className = "chat-item" + (chat.id === currentChatId ? " active" : "");
+    const pin=document.createElement("span");
+    pin.className="pin";
+    pin.textContent=chat.pinned?"★":"▤";
 
-    const pin = document.createElement("span");
-    pin.className = "pin";
-    pin.textContent = chat.pinned ? "★" : "▤";
+    const name=document.createElement("span");
+    name.className="chat-name";
+    name.textContent=chat.title||"New chat";
 
-    const name = document.createElement("span");
-    name.className = "chat-name";
-    name.textContent = chat.title || "New chat";
-
-    const menu = document.createElement("button");
-    menu.className = "icon-btn";
-    menu.textContent = "⋯";
-    menu.title = "Chat options";
-    menu.onclick = e => {
+    const menu=document.createElement("button");
+    menu.className="icon-btn";
+    menu.textContent="⋯";
+    menu.title="Chat options";
+    menu.onclick=e=>{
       e.stopPropagation();
       chatOptions(chat);
     };
 
-    item.append(pin, name, menu);
-    item.onclick = () => openChat(chat.id);
+    item.append(pin,name,menu);
+    item.onclick=()=>openChat(chat.id);
     $("chatList").appendChild(item);
   });
 }
 
 async function loadChats() {
-  if (!currentUser) {
-    chats = [];
+  if(!currentUser) {
+    chats=[];
     renderChats();
     return;
   }
 
-  const { data, error } = await db
-    .from("chats")
+  const {data,error}=await db.from("chats")
     .select("*")
-    .eq("user_id", currentUser.id)
-    .order("updated_at", { ascending: false });
+    .eq("user_id",currentUser.id)
+    .order("updated_at",{ascending:false});
 
-  if (error) {
+  if(error) {
     console.error(error);
     toast("Could not load chat history.");
     return;
   }
 
-  chats = (data || []).map(c => ({
-    ...c,
-    pinned: Boolean(c.pinned)
-  }));
+  chats=(data||[]).map(c=>({...c,pinned:Boolean(c.pinned)}));
   renderChats();
 }
 
 async function createChat() {
-  if (!currentUser) {
+  if(!currentUser) {
     toast("Sign in to save conversations.");
     setAuthScreen(true);
     return;
   }
 
-  const { data, error } = await db
-    .from("chats")
-    .insert({
-      user_id: currentUser.id,
-      title: "New chat"
-    })
+  const {data,error}=await db.from("chats")
+    .insert({user_id:currentUser.id,title:"New chat"})
     .select()
     .single();
 
-  if (error) {
+  if(error) {
     toast(error.message);
     return;
   }
 
-  currentChatId = data.id;
-  currentMessages = [];
-  $("topTitle").textContent = data.title;
+  currentChatId=data.id;
+  currentMessages=[];
+  $("topTitle").textContent=data.title;
   renderMessages();
   await loadChats();
   $("messageInput").focus();
 }
 
 async function openChat(id) {
-  if (!currentUser) return;
+  if(!currentUser) return;
 
-  const { data: chat, error: chatError } = await db
-    .from("chats")
+  const {data:chat,error:chatError}=await db.from("chats")
     .select("*")
-    .eq("id", id)
-    .eq("user_id", currentUser.id)
+    .eq("id",id)
+    .eq("user_id",currentUser.id)
     .single();
 
-  if (chatError) {
+  if(chatError) {
     toast("Could not open chat.");
     return;
   }
 
-  const { data: messages, error } = await db
-    .from("messages")
+  const {data:messages,error}=await db.from("messages")
     .select("*")
-    .eq("chat_id", id)
-    .eq("user_id", currentUser.id)
-    .order("created_at", { ascending: true });
+    .eq("chat_id",id)
+    .eq("user_id",currentUser.id)
+    .order("created_at",{ascending:true});
 
-  if (error) {
+  if(error) {
     toast("Could not load messages.");
     return;
   }
 
-  currentChatId = id;
-  currentMessages = messages || [];
-  $("topTitle").textContent = chat.title || "Chat";
+  currentChatId=id;
+  currentMessages=messages||[];
+  $("topTitle").textContent=chat.title||"Chat";
   renderChats();
   renderMessages();
   $("sidebar").classList.remove("open");
 }
 
-async function saveMessage(role, content) {
-  if (!currentUser || !currentChatId) return;
+async function saveMessage(role,content) {
+  if(!currentUser||!currentChatId) return;
 
-  const { error } = await db.from("messages").insert({
-    chat_id: currentChatId,
-    user_id: currentUser.id,
+  const {error}=await db.from("messages").insert({
+    chat_id:currentChatId,
+    user_id:currentUser.id,
     role,
     content
   });
 
-  if (error) throw error;
+  if(error) throw error;
 
-  await db.from("chats")
-    .update({ updated_at: new Date().toISOString() })
-    .eq("id", currentChatId)
-    .eq("user_id", currentUser.id);
+  await db.from("chats").update({updated_at:new Date().toISOString()})
+    .eq("id",currentChatId)
+    .eq("user_id",currentUser.id);
 }
 
 async function updateChatTitleFromMessage(message) {
-  if (!currentChatId) return;
-  const chat = chats.find(c => c.id === currentChatId);
-  if (!chat || chat.title !== "New chat") return;
+  if(!currentChatId) return;
+  const chat=chats.find(c=>c.id===currentChatId);
+  if(!chat||chat.title!=="New chat") return;
 
-  const title = message.trim().replace(/\s+/g, " ").slice(0, 45) || "New chat";
-  await db.from("chats")
-    .update({ title })
-    .eq("id", currentChatId)
-    .eq("user_id", currentUser.id);
+  const title=message.trim().replace(/\s+/g," ").slice(0,45)||"New chat";
+  await db.from("chats").update({title})
+    .eq("id",currentChatId)
+    .eq("user_id",currentUser.id);
 
-  $("topTitle").textContent = title;
+  $("topTitle").textContent=title;
   await loadChats();
 }
 
-async function sendMessage(forcedMessage = null) {
-  if (isSending) return;
+async function sendMessage(forcedMessage=null) {
+  if(isSending) return;
 
-  const input = $("messageInput");
-  const message = String(forcedMessage ?? input.value).trim();
-  if (!message && !attachedText) return;
+  const input=$("messageInput");
+  const message=String(forcedMessage??input.value).trim();
+  if(!message&&!attachedText) return;
 
-  if (!currentUser) {
+  if(!currentUser) {
     toast("Sign in to use QuBix AI.");
     setAuthScreen(true);
     return;
   }
 
-  if (!currentChatId) await createChat();
-  if (!currentChatId) return;
+  if(!currentChatId) await createChat();
+  if(!currentChatId) return;
 
-  const actualMessage = attachedText
-    ? message + "\n\nAttached file (" + (attachedFile?.name || "file") + "):\n" + attachedText
-    : message;
+  const actualMessage=attachedText
+    ?message+"\n\nAttached file ("+(attachedFile?.name||"file")+ "):\n"+attachedText
+    :message;
 
-  input.value = "";
-  input.style.height = "auto";
+  input.value="";
+  input.style.height="auto";
   clearAttachment();
 
-  const userMessage = { role: "user", content: actualMessage };
+  const userMessage={role:"user",content:actualMessage};
   currentMessages.push(userMessage);
   renderMessages();
 
   setLoading(true);
-  const typing = document.createElement("div");
-  typing.className = "typing";
-  typing.textContent = "QuBix AI is thinking...";
+  const typing=document.createElement("div");
+  typing.className="typing";
+  typing.textContent="QuBix AI is thinking...";
   $("messages").appendChild(typing);
 
   try {
-    await saveMessage("user", actualMessage);
-    await updateChatTitleFromMessage(message || "Attached file");
+    await saveMessage("user",actualMessage);
+    await updateChatTitleFromMessage(message||"Attached file");
 
-    const history = currentMessages.slice(0, -1).slice(-20);
-    const data = await apiRequest({
-      message: actualMessage,
-      messages: history,
-      action: "chat",
-      mode: $("modeSelect").value,
-      webSearchEnabled: $("webToggle").checked
+    const history=currentMessages.slice(0,-1).slice(-20);
+    const data=await apiRequest({
+      message:actualMessage,
+      messages:history,
+      action:"chat",
+      mode:$("modeSelect").value,
+      webSearchEnabled:$("webToggle").checked
     });
 
-    const answer = data.answer || "I couldn't generate an answer.";
-    currentMessages.push({ role: "assistant", content: answer });
-    await saveMessage("assistant", answer);
+    const answer=data.answer||"I couldn't generate an answer.";
+    currentMessages.push({role:"assistant",content:answer});
+    await saveMessage("assistant",answer);
 
     typing.remove();
     renderMessages();
     await loadChats();
-  } catch (error) {
+  } catch(error) {
     typing.remove();
     currentMessages.pop();
     renderMessages();
-    toast(error.message || "Something went wrong.");
+    toast(error.message||"Something went wrong.");
   } finally {
     setLoading(false);
     input.focus();
@@ -588,63 +611,34 @@ async function sendMessage(forcedMessage = null) {
 }
 
 async function regenerateAnswer(index) {
-  if (isSending || !currentUser || !currentChatId) return;
+  if(isSending||!currentUser) return;
+  const target=currentMessages[index];
+  if(!target||target.role!=="assistant") return;
 
-  const target = currentMessages[index];
-  if (!target || target.role !== "assistant") return;
+  let userIndex=index-1;
+  while(userIndex>=0&&currentMessages[userIndex].role!=="user") userIndex--;
+  if(userIndex<0) return;
 
-  let userIndex = index - 1;
-  while (userIndex >= 0 && currentMessages[userIndex].role !== "user") userIndex--;
-  if (userIndex < 0) return;
-
-  const chatId = currentChatId;
-  const userMessage = currentMessages[userIndex].content;
-  const oldVisibleMessages = currentMessages.slice(0, index);
-
-  setLoading(true);
-  currentMessages = oldVisibleMessages;
+  const userMessage=currentMessages[userIndex].content;
+  currentMessages=currentMessages.slice(0,index);
   renderMessages();
+  setLoading(true);
 
   try {
-    // Remove the previous answer from the database before generating a replacement.
-    const { data: oldRows, error: findError } = await db
-      .from("messages")
-      .select("id")
-      .eq("chat_id", chatId)
-      .eq("user_id", currentUser.id)
-      .eq("role", "assistant")
-      .eq("content", target.content)
-      .order("created_at", { ascending: false })
-      .limit(1);
-
-    if (findError) throw findError;
-
-    if (oldRows && oldRows.length) {
-      const { error: deleteError } = await db
-        .from("messages")
-        .delete()
-        .eq("id", oldRows[0].id)
-        .eq("chat_id", chatId)
-        .eq("user_id", currentUser.id);
-      if (deleteError) throw deleteError;
-    }
-
-    const data = await apiRequest({
-      message: userMessage,
-      messages: currentMessages.slice(0, -1).slice(-20),
-      action: "chat",
-      mode: $("modeSelect").value,
-      webSearchEnabled: $("webToggle").checked
+    const data=await apiRequest({
+      message:userMessage,
+      messages:currentMessages.slice(0,-1).slice(-20),
+      action:"chat",
+      mode:$("modeSelect").value,
+      webSearchEnabled:$("webToggle").checked
     });
 
-    const answer = data.answer || "No answer returned.";
-    currentMessages.push({ role: "assistant", content: answer });
-    await saveMessage("assistant", answer);
+    const answer=data.answer||"No answer returned.";
+    currentMessages.push({role:"assistant",content:answer});
+    await saveMessage("assistant",answer);
     renderMessages();
-    await loadChats();
-  } catch (error) {
-    toast(error.message || "Could not regenerate answer.");
-    await openChat(chatId);
+  } catch(error) {
+    toast(error.message);
   } finally {
     setLoading(false);
   }
@@ -652,7 +646,7 @@ async function regenerateAnswer(index) {
 
 async function copyText(text) {
   try {
-    await navigator.clipboard.writeText(String(text || ""));
+    await navigator.clipboard.writeText(String(text||""));
     toast("Copied!");
   } catch {
     toast("Copy failed. Please select the text manually.");
@@ -662,64 +656,56 @@ async function copyText(text) {
 function chatOptions(chat) {
   showModal(`
     <h2>Chat options</h2>
-    <p style="color:var(--muted)">${escapeHTML(chat.title || "Chat")}</p>
+    <p style="color:var(--muted)">${escapeHTML(chat.title||"Chat")}</p>
     <button class="secondary" style="width:100%;margin:5px 0" id="renameChat">✎ Rename chat</button>
-    <button class="secondary" style="width:100%;margin:5px 0" id="pinChat">${chat.pinned ? "☆ Unpin chat" : "★ Pin chat"}</button>
+    <button class="secondary" style="width:100%;margin:5px 0" id="pinChat">${chat.pinned?"☆ Unpin chat":"★ Pin chat"}</button>
     <button class="secondary" style="width:100%;margin:5px 0" id="exportChat">⇩ Export Markdown</button>
     <button class="secondary" style="width:100%;margin:5px 0" id="shareThisChat">↗ Share chat</button>
     <button class="secondary danger" style="width:100%;margin:5px 0" id="deleteChat">⌫ Delete chat</button>
     <div class="modal-actions" style="margin-top:14px"><button class="secondary" id="closeChatOptions">Close</button></div>
   `);
 
-  $("closeChatOptions").onclick = closeModal;
+  $("closeChatOptions").onclick=closeModal;
 
-  $("renameChat").onclick = async () => {
-    const title = prompt("Enter a new chat name:", chat.title || "");
-    if (!title?.trim()) return;
-    const { error } = await db.from("chats")
-      .update({ title: title.trim().slice(0, 100) })
-      .eq("id", chat.id)
-      .eq("user_id", currentUser.id);
-    if (error) return toast(error.message);
-    if (currentChatId === chat.id) $("topTitle").textContent = title.trim();
+  $("renameChat").onclick=async()=>{
+    const title=prompt("Enter a new chat name:",chat.title||"");
+    if(!title?.trim()) return;
+    const {error}=await db.from("chats").update({title:title.trim().slice(0,100)})
+      .eq("id",chat.id).eq("user_id",currentUser.id);
+    if(error) return toast(error.message);
+    if(currentChatId===chat.id) $("topTitle").textContent=title.trim();
     closeModal();
     await loadChats();
   };
 
-  $("pinChat").onclick = async () => {
-    const { error } = await db.from("chats")
-      .update({ pinned: !chat.pinned })
-      .eq("id", chat.id)
-      .eq("user_id", currentUser.id);
+  $("pinChat").onclick=async()=>{
+    const {error}=await db.from("chats").update({pinned:!chat.pinned})
+      .eq("id",chat.id).eq("user_id",currentUser.id);
     closeModal();
-    if (error) toast("Pinning needs the pinned column in chats table.");
+    if(error) toast("Pinning needs the pinned column in chats table.");
     else {
-      toast(chat.pinned ? "Chat unpinned." : "Chat pinned.");
+      toast(chat.pinned?"Chat unpinned.":"Chat pinned.");
       await loadChats();
     }
   };
 
-  $("exportChat").onclick = () => exportChat(chat.id);
-  $("shareThisChat").onclick = () => shareChat(chat.id);
+  $("exportChat").onclick=()=>exportChat(chat.id);
+  $("shareThisChat").onclick=()=>shareChat(chat.id);
 
-  $("deleteChat").onclick = async () => {
-    if (!confirm("Delete this chat and its messages? This cannot be undone.")) return;
-    const { error } = await db.from("messages")
-      .delete()
-      .eq("chat_id", chat.id)
-      .eq("user_id", currentUser.id);
-    if (error) return toast(error.message);
+  $("deleteChat").onclick=async()=>{
+    if(!confirm("Delete this chat and its messages? This cannot be undone.")) return;
+    const {error}=await db.from("messages").delete()
+      .eq("chat_id",chat.id).eq("user_id",currentUser.id);
+    if(error) return toast(error.message);
 
-    const result = await db.from("chats")
-      .delete()
-      .eq("id", chat.id)
-      .eq("user_id", currentUser.id);
+    const result=await db.from("chats").delete()
+      .eq("id",chat.id).eq("user_id",currentUser.id);
 
-    if (result.error) return toast(result.error.message);
-    if (currentChatId === chat.id) {
-      currentChatId = null;
-      currentMessages = [];
-      $("topTitle").textContent = "New chat";
+    if(result.error) return toast(result.error.message);
+    if(currentChatId===chat.id) {
+      currentChatId=null;
+      currentMessages=[];
+      $("topTitle").textContent="New chat";
       renderMessages();
     }
     closeModal();
@@ -729,155 +715,87 @@ function chatOptions(chat) {
 }
 
 async function exportChat(id) {
-  if (!currentUser) return;
-  const { data: chat } = await db.from("chats")
-    .select("*").eq("id", id).eq("user_id", currentUser.id).single();
-  const { data: messages, error } = await db.from("messages")
+  if(!currentUser) return;
+  const {data:chat}=await db.from("chats").select("*")
+    .eq("id",id).eq("user_id",currentUser.id).single();
+  const {data:messages,error}=await db.from("messages")
     .select("role,content,created_at")
-    .eq("chat_id", id)
-    .eq("user_id", currentUser.id)
+    .eq("chat_id",id).eq("user_id",currentUser.id)
     .order("created_at");
 
-  if (error) return toast(error.message);
+  if(error) return toast(error.message);
 
-  const text = "# " + (chat?.title || "QuBix chat") + "\n\n" +
-    (messages || []).map(m =>
-      "## " + (m.role === "user" ? "You" : "QuBix AI") + "\n\n" + m.content
+  const text="# "+(chat?.title||"QuBix chat")+"\n\n"+
+    (messages||[]).map(m=>
+      "## "+(m.role==="user"?"You":"QuBix AI")+"\n\n"+m.content
     ).join("\n\n---\n\n");
 
-  downloadFile(text, (chat?.title || "qubix-chat") + ".md", "text/markdown");
+  downloadFile(text,(chat?.title||"qubix-chat")+".md","text/markdown");
 }
 
-function downloadFile(content, filename, type) {
-  const blob = new Blob([content], { type });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
+function downloadFile(content,filename,type) {
+  const blob=new Blob([content],{type});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;
+  a.download=filename;
   a.click();
   URL.revokeObjectURL(url);
 }
 
 async function shareChat(id) {
-  if (!currentUser) return toast("Please sign in first.");
+  if(!currentUser) return toast("Please sign in first.");
 
   showModal(`
     <h2>Share conversation</h2>
-    <p style="color:var(--muted)">Create a read-only public link or manage existing links.</p>
-    <button class="primary" id="createShareLink" style="width:100%">＋ Create new share link</button>
-    <div id="shareStatus" style="margin-top:18px">Loading links...</div>
-    <div class="modal-actions" style="margin-top:15px"><button class="secondary" id="closeShare">Close</button></div>
+    <p style="color:var(--muted)">Create a read-only public link to this chat.</p>
+    <div id="shareStatus" style="font-size:13px;color:var(--muted);margin:14px 0">Creating share link...</div>
+    <div class="modal-actions"><button class="secondary" id="closeShare">Close</button></div>
   `);
+  $("closeShare").onclick=closeModal;
 
-  $("closeShare").onclick = closeModal;
+  try {
+    const {data,error}=await db.from("qubix_shares")
+      .insert({chat_id:id,user_id:currentUser.id})
+      .select("share_token").single();
+    if(error) throw error;
 
-  async function refreshLinks() {
-    const status = $("shareStatus");
-    if (!status) return;
-    status.textContent = "Loading links...";
-
-    const { data, error } = await db
-      .from("qubix_shares")
-      .select("id,share_token,created_at")
-      .eq("chat_id", id)
-      .eq("user_id", currentUser.id)
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      status.textContent = "Could not load links: " + error.message;
-      return;
-    }
-
-    status.innerHTML = "";
-    if (!data || !data.length) {
-      status.textContent = "No share links created yet.";
-      return;
-    }
-
-    data.forEach(share => {
-      const row = document.createElement("div");
-      row.style.cssText = "padding:12px 0;border-bottom:1px solid var(--line)";
-
-      const link = location.origin + "/share.html?token=" + encodeURIComponent(share.share_token);
-      const input = document.createElement("input");
-      input.value = link;
-      input.readOnly = true;
-      input.style.width = "100%";
-
-      const copy = document.createElement("button");
-      copy.className = "secondary";
-      copy.textContent = "Copy link";
-      copy.onclick = () => copyText(link);
-
-      const revoke = document.createElement("button");
-      revoke.className = "secondary danger";
-      revoke.textContent = "Revoke link";
-      revoke.onclick = async () => {
-        if (!confirm("Revoke this public link?")) return;
-        const { error: deleteError } = await db
-          .from("qubix_shares")
-          .delete()
-          .eq("id", share.id)
-          .eq("user_id", currentUser.id);
-        if (deleteError) return toast(deleteError.message);
-        toast("Share link revoked.");
-        await refreshLinks();
-      };
-
-      row.append(input, copy, revoke);
-      status.appendChild(row);
-    });
+    const link=location.origin+"/share.html?token="+encodeURIComponent(data.share_token);
+    $("shareStatus").innerHTML=`
+      <p>Share link created:</p>
+      <input id="shareLink" value="${escapeHTML(link)}" readonly>
+      <button class="primary" id="copyShareLink">Copy link</button>
+      <p style="font-size:11px">Anyone with this link may be able to view this conversation.</p>
+    `;
+    $("copyShareLink").onclick=()=>copyText(link);
+  } catch(error) {
+    $("shareStatus").textContent=
+      "Share link could not be created. Make sure the qubix_shares table and sharing SQL migration have been executed. Details: "+error.message;
   }
-
-  $("createShareLink").onclick = async () => {
-    const button = $("createShareLink");
-    button.disabled = true;
-    button.textContent = "Creating...";
-    try {
-      const { error } = await db.from("qubix_shares").insert({
-        chat_id: id,
-        user_id: currentUser.id
-      });
-      if (error) throw error;
-      toast("Share link created.");
-      await refreshLinks();
-    } catch (error) {
-      toast("Could not create link: " + error.message);
-    } finally {
-      button.disabled = false;
-      button.textContent = "＋ Create new share link";
-    }
-  };
-
-  await refreshLinks();
 }
 
 async function loadProfile() {
-  if (!currentUser) return;
-  const { data, error } = await db.from("qubix_profiles")
-    .select("*")
-    .eq("user_id", currentUser.id)
-    .maybeSingle();
-
-  if (!error && data) profile = { ...profile, ...data };
+  if(!currentUser) return;
+  const {data,error}=await db.from("qubix_profiles")
+    .select("*").eq("user_id",currentUser.id).maybeSingle();
+  if(!error&&data) profile={...profile,...data};
 }
 
 async function saveProfile() {
-  if (!currentUser) return toast("Sign in to save settings.");
+  if(!currentUser) return toast("Sign in to save settings.");
 
-  const values = {
-    user_id: currentUser.id,
-    preferred_language: $("languageSelect").value,
-    response_style: $("styleSelect").value,
-    custom_instructions: $("customInstructions").value,
-    updated_at: new Date().toISOString()
+  const values={
+    user_id:currentUser.id,
+    preferred_language:$("languageSelect").value,
+    response_style:$("styleSelect").value,
+    custom_instructions:$("customInstructions").value,
+    updated_at:new Date().toISOString()
   };
 
-  const { error } = await db.from("qubix_profiles")
-    .upsert(values, { onConflict: "user_id" });
-
-  if (error) return toast(error.message);
-  profile = { ...profile, ...values };
+  const {error}=await db.from("qubix_profiles")
+    .upsert(values,{onConflict:"user_id"});
+  if(error) return toast(error.message);
+  profile={...profile,...values};
   closeModal();
   toast("Settings saved.");
 }
@@ -894,15 +812,6 @@ function openSettings() {
       <option value="Punjabi">Punjabi</option>
       <option value="Hindi">Hindi</option>
       <option value="Arabic">Arabic</option>
-    </select>
-    <label>Voice input language</label>
-    <select id="voiceLanguageSelect">
-      <option value="en-US">English (US)</option>
-      <option value="en-GB">English (UK)</option>
-      <option value="ur-PK">Urdu</option>
-      <option value="hi-IN">Hindi</option>
-      <option value="pa-IN">Punjabi (India)</option>
-      <option value="ar-SA">Arabic</option>
     </select>
     <label>Response style</label>
     <select id="styleSelect">
@@ -925,33 +834,29 @@ function openSettings() {
     </div>
   `);
 
-  $("languageSelect").value = profile.preferred_language || "auto";
-  $("voiceLanguageSelect").value = localStorage.getItem("qubix_voice_language") || "en-US";
-  $("voiceLanguageSelect").onchange = e => {
-    localStorage.setItem("qubix_voice_language", e.target.value);
-  };
-  $("styleSelect").value = profile.response_style || "balanced";
-  $("customInstructions").value = profile.custom_instructions || "";
-  $("themeSelect").value = localStorage.getItem("qubix_theme") || "dark";
+  $("languageSelect").value=profile.preferred_language||"auto";
+  $("styleSelect").value=profile.response_style||"balanced";
+  $("customInstructions").value=profile.custom_instructions||"";
+  $("themeSelect").value=localStorage.getItem("qubix_theme")||"dark";
 
-  $("closeSettings").onclick = closeModal;
-  $("saveSettings").onclick = saveProfile;
-  $("themeSelect").onchange = e => setTheme(e.target.value);
+  $("closeSettings").onclick=closeModal;
+  $("saveSettings").onclick=saveProfile;
+  $("themeSelect").onchange=e=>setTheme(e.target.value);
 }
 
 function setTheme(theme) {
-  document.body.classList.toggle("light", theme === "light");
-  localStorage.setItem("qubix_theme", theme);
+  document.body.classList.toggle("light",theme==="light");
+  localStorage.setItem("qubix_theme",theme);
 }
 
 async function loadMemories() {
-  const data = await apiRequest({ action: "memory_list" });
-  memories = data.memories || [];
+  const data=await apiRequest({action:"memory_list"});
+  memories=data.memories||[];
   return memories;
 }
 
 async function openMemories() {
-  if (!currentUser) {
+  if(!currentUser) {
     toast("Sign in to manage memories.");
     setAuthScreen(true);
     return;
@@ -967,93 +872,87 @@ async function openMemories() {
     </div>
   `);
 
-  $("closeMemories").onclick = closeModal;
-  $("addMemory").onclick = addMemoryPrompt;
+  $("closeMemories").onclick=closeModal;
+  $("addMemory").onclick=addMemoryPrompt;
 
   try {
     await refreshMemoryList();
-  } catch (error) {
-    $("memoryList").textContent = error.message;
+  } catch(error) {
+    $("memoryList").textContent=error.message;
   }
 }
 
 async function refreshMemoryList() {
   await loadMemories();
-  const list = $("memoryList");
-  if (!list) return;
-
-  if (!memories.length) {
-    list.textContent = "No saved memories yet.";
+  const list=$("memoryList");
+  if(!list) return;
+  if(!memories.length) {
+    list.textContent="No saved memories yet.";
     return;
   }
 
-  list.innerHTML = "";
-  memories.forEach(memory => {
-    const row = document.createElement("div");
-    row.style.cssText = "padding:10px 0;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:center";
-    const text = document.createElement("div");
-    text.style.cssText = "flex:1;font-size:13px";
-    text.textContent = memory.memory;
+  list.innerHTML="";
+  memories.forEach(memory=>{
+    const row=document.createElement("div");
+    row.style.cssText="padding:10px 0;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:center";
+    const text=document.createElement("div");
+    text.style.cssText="flex:1;font-size:13px";
+    text.textContent=memory.memory;
 
-    const del = document.createElement("button");
-    del.className = "secondary danger";
-    del.textContent = "Delete";
-    del.onclick = async () => {
-      if (!confirm("Delete this memory?")) return;
+    const del=document.createElement("button");
+    del.className="secondary danger";
+    del.textContent="Delete";
+    del.onclick=async()=>{
+      if(!confirm("Delete this memory?")) return;
       try {
-        await apiRequest({ action: "memory_delete", id: memory.id });
+        await apiRequest({action:"memory_delete",id:memory.id});
         await refreshMemoryList();
-      } catch (e) { toast(e.message); }
+      } catch(e) {toast(e.message);}
     };
-    row.append(text, del);
+    row.append(text,del);
     list.appendChild(row);
   });
 }
 
 async function addMemoryPrompt() {
-  const memory = prompt("What should QuBix remember?");
-  if (!memory?.trim()) return;
-
+  const memory=prompt("What should QuBix remember?");
+  if(!memory?.trim()) return;
   try {
-    await apiRequest({
-      action: "memory_save",
-      memory: memory.trim(),
-      category: "general"
-    });
+    await apiRequest({action:"memory_save",memory:memory.trim(),category:"general"});
     await refreshMemoryList();
     toast("Memory saved.");
-  } catch (error) {
+  } catch(error) {
     toast(error.message);
   }
 }
 
 function clearAttachment() {
-  attachedFile = null;
-  attachedText = "";
-  $("fileChip").hidden = true;
-  $("fileChip").textContent = "";
-  $("fileInput").value = "";
+  attachedFile=null;
+  attachedText="";
+  $("fileChip").hidden=true;
+  $("fileChip").textContent="";
+  $("fileInput").value="";
 }
 
 async function handleFile(file) {
-  if (!file) return;
-  const maxSize = 5 * 1024 * 1024;
-  if (file.size > maxSize) {
+  if(!file) return;
+  const maxSize=5*1024*1024;
+  if(file.size>maxSize) {
     toast("File is too large. Maximum size is 5 MB.");
     return;
   }
 
-  const ext = file.name.split(".").pop().toLowerCase();
-  if (!["txt", "md", "csv", "json"].includes(ext)) {
+  const ext=file.name.split(".").pop().toLowerCase();
+  if(!["txt","md","csv","json"].includes(ext)) {
     toast("This file type is not yet supported for text extraction. Use TXT, MD, CSV or JSON.");
     return;
   }
 
   try {
-    attachedText = await file.text();
-    attachedFile = file;
-    $("fileChip").hidden = false;
-    $("fileChip").textContent = "Attached: " + file.name + " · " + Math.round(file.size / 1024) + " KB";
+    attachedText=await file.text();
+    attachedFile=file;
+    $("fileChip").hidden=false;
+    $("fileChip").textContent="Attached: "+file.name+" · "+Math.round(file.size/1024)+" KB";
     toast("File attached.");
   } catch {
     toast("Could not read this file.");
@@ -1061,53 +960,45 @@ async function handleFile(file) {
 }
 
 async function generateImageFromPrompt(promptText) {
-  if (!currentUser) {
+  if(!currentUser) {
     toast("Sign in to generate images.");
     setAuthScreen(true);
     return;
   }
-  if (!promptText.trim()) return;
+  if(!promptText.trim()) return;
 
   setLoading(true);
-  const userMessage = { role: "user", content: "Generate an image: " + promptText };
+  const userMessage={role:"user",content:"Generate an image: "+promptText};
   currentMessages.push(userMessage);
   renderMessages();
 
   try {
-    await saveMessage("user", userMessage.content);
-    const data = await apiRequest({
-      action: "generate_image",
-      prompt: promptText
-    });
+    await saveMessage("user",userMessage.content);
+    const data=await apiRequest({action:"generate_image",prompt:promptText});
+    if(!data.image?.data) throw new Error("No image returned.");
 
-    if (!data.image?.data) throw new Error("No image returned.");
-
-    const mime = data.image.mimeType || "image/png";
-    const imageUrl = "data:" + mime + ";base64," + data.image.data;
-
-    const message = {
-      role: "assistant",
-      content: "Your image has been generated."
-    };
+    const mime=data.image.mimeType||"image/png";
+    const imageUrl="data:"+mime+";base64,"+data.image.data;
+    const message={role:"assistant",content:"Your image has been generated."};
     currentMessages.push(message);
-    await saveMessage("assistant", message.content);
+    await saveMessage("assistant",message.content);
     renderMessages();
 
-    const last = $("messages").lastElementChild;
-    const image = document.createElement("img");
-    image.className = "generated-image";
-    image.src = imageUrl;
-    image.alt = "Generated image";
+    const last=$("messages").lastElementChild;
+    const image=document.createElement("img");
+    image.className="generated-image";
+    image.src=imageUrl;
+    image.alt="Generated image";
 
-    const download = document.createElement("a");
-    download.href = imageUrl;
-    download.download = "qubix-generated-image.png";
-    download.textContent = "Download image";
-    download.style.cssText = "display:inline-block;margin-top:8px;color:#a99cff;font-size:13px";
+    const download=document.createElement("a");
+    download.href=imageUrl;
+    download.download="qubix-generated-image.png";
+    download.textContent="Download image";
+    download.style.cssText="display:inline-block;margin-top:8px;color:#a99cff;font-size:13px";
 
-    last.querySelector(".message-content").append(image, download);
-    $("content").scrollTop = $("content").scrollHeight;
-  } catch (error) {
+    last.querySelector(".message-content").append(image,download);
+    $("content").scrollTop=$("content").scrollHeight;
+  } catch(error) {
     currentMessages.pop();
     renderMessages();
     toast(error.message);
@@ -1117,212 +1008,191 @@ async function generateImageFromPrompt(promptText) {
 }
 
 function startVoiceInput() {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
+  const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SpeechRecognition) {
     toast("Voice input is not supported in this browser.");
     return;
   }
 
-  const recognition = new SpeechRecognition();
-  recognition.lang = localStorage.getItem("qubix_voice_language") || "en-US";
-  recognition.interimResults = true;
-  recognition.maxAlternatives = 1;
+  const recognition=new SpeechRecognition();
+  recognition.lang="en-US";
+  recognition.interimResults=false;
+  recognition.maxAlternatives=1;
 
-  const button = $("voiceBtn");
-  const originalText = button.textContent;
-  button.textContent = "Listening...";
-  button.disabled = true;
-
-  recognition.onresult = event => {
-    let transcript = "";
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      transcript += event.results[i][0].transcript;
-    }
-    if (transcript) {
-      $("messageInput").value = transcript;
-      $("messageInput").dispatchEvent(new Event("input"));
-    }
+  $("voiceBtn").textContent="Listening...";
+  recognition.onresult=event=>{
+    const result=event.results[0][0].transcript;
+    $("messageInput").value+=($("messageInput").value?" ":"")+result;
+    $("messageInput").dispatchEvent(new Event("input"));
   };
-
-  recognition.onerror = event => toast("Voice input error: " + event.error);
-  recognition.onend = () => {
-    button.textContent = originalText;
-    button.disabled = false;
-  };
-
-  try {
-    recognition.start();
-  } catch (error) {
-    button.textContent = originalText;
-    button.disabled = false;
-    toast("Could not start voice input.");
-  }
+  recognition.onerror=()=>toast("Voice input failed.");
+  recognition.onend=()=>$("voiceBtn").textContent="🎙 Voice";
+  recognition.start();
 }
 
 async function authSubmit() {
-  const email = $("authEmail").value.trim();
-  const password = $("authPassword").value;
+  const email=$("authEmail").value.trim();
+  const password=$("authPassword").value;
+  if(!email||!password) return toast("Enter email and password.");
 
-  if (!email || !password) return toast("Enter email and password.");
-
-  $("authSubmit").disabled = true;
+  $("authSubmit").disabled=true;
   try {
-    if (authMode === "signup") {
-      const { data, error } = await db.auth.signUp({ email, password });
-      if (error) throw error;
-
-      if (data.session) {
-        currentSession = data.session;
-        currentUser = data.user;
+    if(authMode==="signup") {
+      const {data,error}=await db.auth.signUp({email,password});
+      if(error) throw error;
+      if(data.session) {
+        currentSession=data.session;
+        currentUser=data.user;
         setAuthScreen(false);
+        await afterLogin();
       } else {
         toast("Account created. Check your email to confirm, then sign in.");
       }
     } else {
-      const { data, error } = await db.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-      currentSession = data.session;
-      currentUser = data.user;
+      const {data,error}=await db.auth.signInWithPassword({email,password});
+      if(error) throw error;
+      currentSession=data.session;
+      currentUser=data.user;
       setAuthScreen(false);
+      await afterLogin();
     }
-  } catch (error) {
+  } catch(error) {
     toast(error.message);
   } finally {
-    $("authSubmit").disabled = false;
+    $("authSubmit").disabled=false;
   }
 }
 
 async function afterLogin() {
-  $("userAvatar").textContent = (currentUser.email || "Q").charAt(0).toUpperCase();
+  $("userAvatar").textContent=(currentUser.email||"Q").charAt(0).toUpperCase();
   await loadProfile();
   await loadChats();
   toast("Signed in successfully.");
 }
 
 async function signOut() {
-  const { error } = await db.auth.signOut();
-  if (error) return toast(error.message);
+  const {error}=await db.auth.signOut();
+  if(error) return toast(error.message);
 
-  currentUser = null;
-  currentSession = null;
-  currentChatId = null;
-  currentMessages = [];
-  chats = [];
+  currentUser=null;
+  currentSession=null;
+  currentChatId=null;
+  currentMessages=[];
+  chats=[];
   renderChats();
   renderMessages();
-  $("topTitle").textContent = "New chat";
+  $("topTitle").textContent="New chat";
   closeModal();
   toast("Signed out.");
 }
 
 function openAccount() {
-  if (!currentUser) {
+  if(!currentUser) {
     setAuthScreen(true);
     return;
   }
 
   showModal(`
     <h2>Your account</h2>
-    <p style="color:var(--muted)">${escapeHTML(currentUser.email || "")}</p>
+    <p style="color:var(--muted)">${escapeHTML(currentUser.email||"")}</p>
     <p style="font-size:12px;color:var(--muted)">Your chats and memories are associated with this account.</p>
     <div class="modal-actions">
       <button class="secondary" id="closeAccount">Close</button>
       <button class="primary" id="signOutBtn">Sign out</button>
     </div>
   `);
-  $("closeAccount").onclick = closeModal;
-  $("signOutBtn").onclick = signOut;
+  $("closeAccount").onclick=closeModal;
+  $("signOutBtn").onclick=signOut;
 }
 
 function forgotPassword() {
-  const email = $("authEmail").value.trim();
-  if (!email) return toast("Enter your email address first.");
+  const email=$("authEmail").value.trim();
+  if(!email) return toast("Enter your email address first.");
 
-  db.auth.resetPasswordForEmail(email, {
-    redirectTo: location.origin
-  }).then(({ error }) => {
-    if (error) toast(error.message);
-    else toast("Password reset email sent.");
-  });
+  db.auth.resetPasswordForEmail(email,{redirectTo:location.origin})
+    .then(({error})=>{
+      if(error) toast(error.message);
+      else toast("Password reset email sent.");
+    });
 }
 
 /* UI events */
-$("newChatBtn").onclick = createChat;
-$("sendBtn").onclick = () => sendMessage();
-$("messageInput").addEventListener("keydown", e => {
-  if (e.key === "Enter" && !e.shiftKey) {
+$("newChatBtn").onclick=createChat;
+$("sendBtn").onclick=()=>sendMessage();
+$("messageInput").addEventListener("keydown",e=>{
+  if(e.key==="Enter"&&!e.shiftKey) {
     e.preventDefault();
     sendMessage();
   }
 });
-$("messageInput").addEventListener("input", () => {
-  const el = $("messageInput");
-  el.style.height = "auto";
-  el.style.height = Math.min(el.scrollHeight, 180) + "px";
+$("messageInput").addEventListener("input",()=>{
+  const el=$("messageInput");
+  el.style.height="auto";
+  el.style.height=Math.min(el.scrollHeight,180)+"px";
 });
-$("chatSearch").oninput = renderChats;
-$("settingsBtn").onclick = openSettings;
-$("memoryBtn").onclick = openMemories;
-$("accountBtn").onclick = openAccount;
-$("menuBtn").onclick = () => $("sidebar").classList.toggle("open");
-$("shareBtn").onclick = () => {
-  if (currentChatId) shareChat(currentChatId);
+$("chatSearch").oninput=renderChats;
+$("settingsBtn").onclick=openSettings;
+$("memoryBtn").onclick=openMemories;
+$("accountBtn").onclick=openAccount;
+$("menuBtn").onclick=()=>$("sidebar").classList.toggle("open");
+$("shareBtn").onclick=()=>{
+  if(currentChatId) shareChat(currentChatId);
   else toast("Start a conversation first.");
 };
-$("attachBtn").onclick = () => $("fileInput").click();
-$("fileInput").onchange = e => handleFile(e.target.files[0]);
-$("voiceBtn").onclick = startVoiceInput;
-$("imageBtn").onclick = () => {
-  const promptText = prompt("Describe the image you want QuBix AI to generate:");
-  if (promptText?.trim()) generateImageFromPrompt(promptText.trim());
+$("attachBtn").onclick=()=>$("fileInput").click();
+$("fileInput").onchange=e=>handleFile(e.target.files[0]);
+$("voiceBtn").onclick=startVoiceInput;
+$("imageBtn").onclick=()=>{
+  const promptText=prompt("Describe the image you want QuBix to generate:");
+  if(promptText?.trim()) generateImageFromPrompt(promptText.trim());
 };
 
-$("authSubmit").onclick = authSubmit;
-$("authSwitch").onclick = () => {
-  authMode = authMode === "signin" ? "signup" : "signin";
-  $("authTitle").textContent = authMode === "signup" ? "Create your account" : "Welcome back";
-  $("authSubmit").textContent = authMode === "signup" ? "Create account" : "Sign in";
-  $("authSwitch").textContent = authMode === "signup" ? "Back to sign in" : "Create an account";
+$("authSubmit").onclick=authSubmit;
+$("authSwitch").onclick=()=>{
+  authMode=authMode==="signin"?"signup":"signin";
+  $("authTitle").textContent=authMode==="signup"?"Create your account":"Welcome back";
+  $("authSubmit").textContent=authMode==="signup"?"Create account":"Sign in";
+  $("authSwitch").textContent=authMode==="signup"?"Back to sign in":"Create an account";
 };
-$("forgotBtn").onclick = forgotPassword;
-$("guestBtn").onclick = () => setAuthScreen(false);
+$("forgotBtn").onclick=forgotPassword;
+$("guestBtn").onclick=()=>setAuthScreen(false);
 
-document.querySelectorAll(".suggestion").forEach(button => {
-  button.onclick = () => sendMessage(button.dataset.prompt);
+document.querySelectorAll(".suggestion").forEach(button=>{
+  button.onclick=()=>sendMessage(button.dataset.prompt);
 });
 
 async function init() {
-  setTheme(localStorage.getItem("qubix_theme") || "dark");
+  setTheme(localStorage.getItem("qubix_theme")||"dark");
 
-  const { data } = await db.auth.getSession();
-  currentSession = data.session;
-  currentUser = data.session?.user || null;
+  const {data}=await db.auth.getSession();
+  currentSession=data.session;
+  currentUser=data.session?.user||null;
 
-  db.auth.onAuthStateChange((_event, session) => {
-    currentSession = session;
-    currentUser = session?.user || null;
-    if (currentUser) {
+  db.auth.onAuthStateChange((_event,session)=>{
+    currentSession=session;
+    currentUser=session?.user||null;
+    if(currentUser) {
       setAuthScreen(false);
-      setTimeout(afterLogin, 0);
+      setTimeout(afterLogin,0);
     } else {
-      chats = [];
-      currentChatId = null;
-      currentMessages = [];
+      chats=[];
+      currentChatId=null;
+      currentMessages=[];
       renderChats();
       renderMessages();
     }
   });
 
-  if (currentUser) {
+  if(currentUser) {
     await afterLogin();
   } else {
-    $("userAvatar").textContent = "Q";
+    $("userAvatar").textContent="Q";
     renderMessages();
   }
 
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("/sw.js").catch(err => {
-      console.warn("Service worker registration failed:", err);
+  if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="localhost")) {
+    navigator.serviceWorker.register("/sw.js").catch(err=>{
+      console.warn("Service worker registration failed:",err);
     });
   }
 }
