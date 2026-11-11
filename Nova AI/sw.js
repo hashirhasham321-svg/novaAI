@@ -1,11 +1,13 @@
-const CACHE_NAME = "qubix-cache-v2";
+const CACHE_NAME = "qubix-cache-v3";
 
 const APP_FILES = [
   "/",
   "/index.html",
   "/manifest.json",
-  "/share.html",
   "/icon.svg",
+  "/icon-192.png",
+  "/icon-512.png",
+  "/share.html",
   "/privacy.html",
   "/terms.html",
   "/about.html"
@@ -39,10 +41,8 @@ self.addEventListener("activate", event => {
           .filter(key => key !== CACHE_NAME)
           .map(key => caches.delete(key))
       )
-    )
+    ).then(() => self.clients.claim())
   );
-
-  self.clients.claim();
 });
 
 // FETCH
@@ -50,10 +50,9 @@ self.addEventListener("fetch", event => {
   const request = event.request;
   const url = new URL(request.url);
 
-  // Only cache GET requests
   if (request.method !== "GET") return;
 
-  // Never cache API or private Supabase requests
+  // API aur private requests cache nahi hongi
   if (
     url.pathname.startsWith("/api/") ||
     url.pathname.includes("/.netlify/") ||
@@ -62,13 +61,16 @@ self.addEventListener("fetch", event => {
     return;
   }
 
-  // Do not cache external websites or CDN resources
   if (url.origin !== self.location.origin) return;
 
   event.respondWith(
     fetch(request)
       .then(response => {
-        if (response && response.ok) {
+        if (
+          response &&
+          response.ok &&
+          response.type === "basic"
+        ) {
           const copy = response.clone();
 
           caches.open(CACHE_NAME).then(cache => {
@@ -83,7 +85,6 @@ self.addEventListener("fetch", event => {
 
         if (cached) return cached;
 
-        // Offline fallback for page navigation
         if (request.mode === "navigate") {
           return (
             await caches.match("/index.html")
@@ -98,7 +99,9 @@ self.addEventListener("fetch", event => {
           );
         }
 
-        return new Response("Offline", { status: 503 });
+        return new Response("Offline", {
+          status: 503
+        });
       })
   );
 });
