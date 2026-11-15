@@ -52,12 +52,7 @@ select,.select{background:var(--panel);border:1px solid var(--line);border-radiu
 .welcome{max-width:760px;margin:10vh auto 0;text-align:center}
 .welcome h1{font-size:clamp(28px,5vw,43px);margin:0 0 12px}
 .welcome-logo{width:43px;height:43px;object-fit:contain;vertical-align:middle;margin-right:8px;border-radius:11px}
-.gradient,.gradient-text{
-  background:linear-gradient(90deg,#a58cff,#62c6ff);
-  background-clip:text;
-  -webkit-background-clip:text;
-  color:transparent;
-}
+.gradient,.gradient-text{background:linear-gradient(90deg,#a58cff,#62c6ff);background-clip:text;-webkit-background-clip:text;color:transparent}
 .welcome p{color:var(--muted);line-height:1.7}
 .suggestions{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:32px;text-align:left}
 .suggestion{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:16px;cursor:pointer;color:var(--text)}
@@ -217,6 +212,9 @@ body.light .message-content pre{background:#f0f1f6;color:#202234}
 <script>
 "use strict";
 
+/* FIX: DOM helper must be declared before first use */
+const $ = id => document.getElementById(id);
+
 /* PWA install support */
 let deferredInstallPrompt = null;
 
@@ -259,7 +257,6 @@ const SUPABASE_KEY = "sb_publishable_k50vs5oP1POySSKevkaSYw_fgPn7O_T";
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const API_URL = "/api/chat";
-const $ = id => document.getElementById(id);
 
 let currentUser = null;
 let currentSession = null;
@@ -349,7 +346,7 @@ function showWelcome(show) {
   $("welcome").style.display=show?"block":"none";
 }
 
-/* Baqi JavaScript Part 2 mein continue hoga. */function renderMessage(message,index) {
+function renderMessage(message,index) {
   const isUser=message.role==="user";
   const content=safeMarkdown(message.content||"");
   const wrapper=document.createElement("article");
@@ -1076,7 +1073,6 @@ async function authSubmit() {
 }
 
 async function afterLogin() {
-  // QuBix logo top-right par hamesha show hoga.
   $("userAvatar").innerHTML='<img src="/icon.svg" alt="QuBix">';
   await loadProfile();
   await loadChats();
