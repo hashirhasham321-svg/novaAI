@@ -384,7 +384,7 @@ function getProfilePrompt(profile) {
 
   return parts.join("\n");
 }
-
+export default async (request) => {
 if (request.method === "OPTIONS") {
   return new Response(null, {
     status: 204,
