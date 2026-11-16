@@ -21,11 +21,13 @@ For coding requests, provide complete working code where possible.
 Never claim to have performed actions you did not perform.
 `;
 
-const json = (statusCode, body) => ({
-  statusCode,
-  headers: HEADERS,
-  body: JSON.stringify(body)
-});
+const json = (statusCode, body) => new Response(
+  JSON.stringify(body),
+  {
+    status: statusCode,
+    headers: HEADERS
+  }
+);
 
 function getSupabaseHeaders(token) {
   return {
@@ -383,21 +385,19 @@ function getProfilePrompt(profile) {
   return parts.join("\n");
 }
 
-export default async (request) => {
-  if (request.method === "OPTIONS") {
-    return {
-      statusCode: 204,
-      headers: HEADERS,
-      body: ""
-    };
-  }
+if (request.method === "OPTIONS") {
+  return new Response(null, {
+    status: 204,
+    headers: HEADERS
+  });
+}
 
   if (request.method !== "POST") {
     return json(405, { error: "Method not allowed" });
   }
 
   try {
-    const token = (request.headers.authorization || "")
+    const token = (request.headers.get("authorization") || "")
       .replace(/^Bearer\s+/i, "");
 
     const user = await authenticate(token);
