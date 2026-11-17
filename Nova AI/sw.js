@@ -1,4 +1,4 @@
-const CACHE_NAME = "qubix-cache-v3";
+const CACHE_NAME = "qubix-cache-v4";
 
 const APP_FILES = [
   "/",
@@ -7,6 +7,7 @@ const APP_FILES = [
   "/icon.svg",
   "/icon-192.png",
   "/icon-512.png",
+  "/apple-touch-icon.png",
   "/share.html",
   "/privacy.html",
   "/terms.html",
@@ -52,7 +53,7 @@ self.addEventListener("fetch", event => {
 
   if (request.method !== "GET") return;
 
-  // API aur private requests cache nahi hongi
+  // Never cache API or private requests
   if (
     url.pathname.startsWith("/api/") ||
     url.pathname.includes("/.netlify/") ||
@@ -61,6 +62,7 @@ self.addEventListener("fetch", event => {
     return;
   }
 
+  // Only handle this website's requests
   if (url.origin !== self.location.origin) return;
 
   event.respondWith(
