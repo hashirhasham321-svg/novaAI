@@ -1,4 +1,3 @@
-
 const HEADERS = {
   "Content-Type": "application/json",
   "Access-Control-Allow-Origin": "*",
@@ -9,7 +8,8 @@ const HEADERS = {
 const MODELS = {
   groq: "openai/gpt-oss-20b",
   gemini: "gemini-2.5-flash",
-  image: "gemini-2.5-flash-image"
+  imagePrimary: "gemini-3.1-flash-image",
+  imageFallback: "gemini-2.5-flash-image"
 };
 
 const SYSTEM_PROMPT = `
@@ -23,10 +23,7 @@ Never claim to have performed actions you did not perform.
 
 const json = (statusCode, body) => new Response(
   JSON.stringify(body),
-  {
-    status: statusCode,
-    headers: HEADERS
-  }
+  { status: statusCode, headers: HEADERS }
 );
 
 function getSupabaseHeaders(token) {
@@ -37,7 +34,6 @@ function getSupabaseHeaders(token) {
   };
 }
 
-// GROQ AI
 async function callGroq(messages, apiKey, temperature = 0.7) {
   const response = await fetch(
     "https://api.groq.com/openai/v1/chat/completions",
@@ -60,13 +56,14 @@ async function callGroq(messages, apiKey, temperature = 0.7) {
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.error?.message || "Groq request failed");
+    throw new Error(
+      data.error?.message || `Groq request failed (${response.status})`
+    );
   }
 
   return data.choices?.[0]?.message?.content || "";
 }
 
-// GEMINI HISTORY FORMAT
 function prepareGeminiContents(messages) {
   const contents = [];
 
@@ -74,18 +71,18 @@ function prepareGeminiContents(messages) {
     if (message.role === "system") continue;
 
     const role = message.role === "assistant" ? "model" : "user";
-    const text = String(message.content || "");
+    const value = String(message.content || "");
 
-    if (!text.trim()) continue;
+    if (!value.trim()) continue;
 
     const previous = contents[contents.length - 1];
 
     if (previous && previous.role === role) {
-      previous.parts[0].text += "\n\n" + text;
+      previous.parts[0].text += "\n\n" + value;
     } else {
       contents.push({
         role,
-        parts: [{ text }]
+        parts: [{ text: value }]
       });
     }
   }
@@ -97,7 +94,6 @@ function prepareGeminiContents(messages) {
   return contents;
 }
 
-// GEMINI BACKUP AI
 async function callGemini(
   messages,
   apiKey,
@@ -107,15 +103,16 @@ async function callGemini(
   const contents = prepareGeminiContents(messages);
 
   if (!contents.length) {
-    throw new Error("No conversation content for Gemini");
+    throw new Error("No conversation content for Gemini.");
   }
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${MODELS.gemini}:generateContent?key=${encodeURIComponent(apiKey)}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${MODELS.gemini}:generateContent`,
     {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey
       },
       body: JSON.stringify({
         systemInstruction: {
@@ -133,41 +130,40 @@ async function callGemini(
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.error?.message || "Gemini request failed");
+    throw new Error(
+      data.error?.message || `Gemini request failed (${response.status})`
+    );
   }
 
   return data.candidates?.[0]?.content?.parts
-    ?.map(part => part.text || "")
+    ?.filter(part => part.text)
+    .map(part => part.text)
     .join("") || "";
 }
 
-// WEB SEARCH
+/* ---------------- WEB SEARCH ---------------- */
+
 async function webSearch(query) {
   if (!process.env.TAVILY_API_KEY) {
-    throw new Error("Web search is not configured");
+    throw new Error("Web search is not configured. Add TAVILY_API_KEY.");
   }
 
-  const response = await fetch(
-    "https://api.tavily.com/search",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        api_key: process.env.TAVILY_API_KEY,
-        query,
-        search_depth: "basic",
-        max_results: 5,
-        include_answer: true
-      })
-    }
-  );
+  const response = await fetch("https://api.tavily.com/search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      api_key: process.env.TAVILY_API_KEY,
+      query,
+      search_depth: "basic",
+      max_results: 5,
+      include_answer: true
+    })
+  });
 
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.error?.message || "Web search failed");
+    throw new Error(data.error?.message || "Web search failed.");
   }
 
   return {
@@ -180,22 +176,26 @@ async function webSearch(query) {
   };
 }
 
-// IMAGE GENERATION
-async function generateImage(prompt) {
-  if (!process.env.GEMINI_API_KEY) {
-    throw new Error("Image generation is not configured");
-  }
+/* ---------------- IMAGE GENERATION ---------------- */
 
+async function generateImageWithModel(prompt, apiKey, model) {
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${MODELS.image}:generateContent?key=${encodeURIComponent(process.env.GEMINI_API_KEY)}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
     {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey
       },
       body: JSON.stringify({
         contents: [{
-          parts: [{ text: prompt }]
+          role: "user",
+          parts: [{
+            text:
+              "Generate an image based on this description. " +
+              "Return an actual generated image, not just a written description.\n\n" +
+              prompt
+          }]
         }],
         generationConfig: {
           responseModalities: ["TEXT", "IMAGE"]
@@ -207,32 +207,83 @@ async function generateImage(prompt) {
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.error?.message || "Image generation failed");
+    throw new Error(
+      data.error?.message ||
+      `Image model ${model} failed (${response.status}).`
+    );
   }
 
   const parts = data.candidates?.[0]?.content?.parts || [];
   const imagePart = parts.find(part => part.inlineData?.data);
 
   if (!imagePart) {
+    const textMessage = parts
+      .filter(part => part.text)
+      .map(part => part.text)
+      .join(" ");
+
     throw new Error(
-      parts.find(part => part.text)?.text || "No image was returned"
+      textMessage ||
+      "Gemini did not return an image. Check API access, quota and model availability."
     );
   }
 
   return {
     mimeType: imagePart.inlineData.mimeType || "image/png",
-    data: imagePart.inlineData.data
+    data: imagePart.inlineData.data,
+    model
   };
 }
 
-// SUPABASE AUTHENTICATION
+async function generateImage(prompt) {
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (!apiKey) {
+    throw new Error(
+      "GEMINI_API_KEY is missing in Netlify environment variables."
+    );
+  }
+
+  let firstError;
+
+  try {
+    return await generateImageWithModel(
+      prompt,
+      apiKey,
+      MODELS.imagePrimary
+    );
+  } catch (error) {
+    firstError = error;
+    console.error("Primary image model failed:", error.message);
+  }
+
+  try {
+    return await generateImageWithModel(
+      prompt,
+      apiKey,
+      MODELS.imageFallback
+    );
+  } catch (fallbackError) {
+    console.error("Fallback image model failed:", fallbackError.message);
+
+    throw new Error(
+      "Image generation failed. Primary: " +
+      firstError.message +
+      " | Fallback: " +
+      fallbackError.message
+    );
+  }
+}
+
+/* ---------------- AUTHENTICATION ---------------- */
+
 async function authenticate(token) {
   if (
     !token ||
     !process.env.SUPABASE_URL ||
     !process.env.SUPABASE_ANON_KEY
   ) {
-    throw new Error("Authentication required");
+    throw new Error("Authentication required.");
   }
 
   const response = await fetch(
@@ -246,13 +297,14 @@ async function authenticate(token) {
   );
 
   if (!response.ok) {
-    throw new Error("Invalid or expired login session");
+    throw new Error("Invalid or expired login session.");
   }
 
   return response.json();
 }
 
-// LOAD USER PROFILE
+/* ---------------- PROFILE ---------------- */
+
 async function loadProfile(userId, token) {
   const url = new URL(
     `${process.env.SUPABASE_URL}/rest/v1/qubix_profiles`
@@ -270,14 +322,15 @@ async function loadProfile(userId, token) {
   });
 
   if (!response.ok) {
-    throw new Error("Could not load user profile");
+    throw new Error("Could not load user profile.");
   }
 
   const rows = await response.json();
   return rows?.[0] || {};
 }
 
-// SAVE MEMORY
+/* ---------------- MEMORIES ---------------- */
+
 async function saveMemory(userId, memory, category, token) {
   const url = new URL(
     `${process.env.SUPABASE_URL}/rest/v1/qubix_memories`
@@ -299,22 +352,19 @@ async function saveMemory(userId, memory, category, token) {
   });
 
   if (!response.ok) {
-    throw new Error("Could not save memory");
+    const error = await response.text();
+    throw new Error("Could not save memory: " + error);
   }
 
   return true;
 }
 
-// LIST MEMORIES
 async function listMemories(userId, token) {
   const url = new URL(
     `${process.env.SUPABASE_URL}/rest/v1/qubix_memories`
   );
 
-  url.searchParams.set(
-    "select",
-    "id,memory,category,created_at"
-  );
+  url.searchParams.set("select", "id,memory,category,created_at");
   url.searchParams.set("user_id", `eq.${userId}`);
   url.searchParams.set("order", "created_at.desc");
   url.searchParams.set("limit", "100");
@@ -324,17 +374,14 @@ async function listMemories(userId, token) {
   });
 
   if (!response.ok) {
-    throw new Error("Could not load memories");
+    throw new Error("Could not load memories.");
   }
 
   return response.json();
 }
 
-// DELETE ONE MEMORY
 async function deleteMemory(id, userId, token) {
-  if (!id) {
-    throw new Error("Memory ID is required");
-  }
+  if (!id) throw new Error("Memory ID is required.");
 
   const url = new URL(
     `${process.env.SUPABASE_URL}/rest/v1/qubix_memories`
@@ -349,13 +396,12 @@ async function deleteMemory(id, userId, token) {
   });
 
   if (!response.ok) {
-    throw new Error("Could not delete memory");
+    throw new Error("Could not delete memory.");
   }
 
   return true;
 }
 
-// CLEAR ALL MEMORIES
 async function clearMemories(userId, token) {
   const url = new URL(
     `${process.env.SUPABASE_URL}/rest/v1/qubix_memories`
@@ -369,26 +415,30 @@ async function clearMemories(userId, token) {
   });
 
   if (!response.ok) {
-    throw new Error("Could not clear memories");
+    throw new Error("Could not clear memories.");
   }
 
   return true;
 }
 
-// AI MODES
+/* ---------------- MODES AND PERSONALIZATION ---------------- */
+
 function getModePrompt(mode) {
   const prompts = {
     normal: "Answer naturally and helpfully.",
-    study: "Act as a patient tutor. Explain concepts step by step and use examples.",
-    coding: "Act as an expert programmer. Give practical, correct code and explain important steps.",
-    creative: "Be creative and original while following the user's request.",
-    research: "Analyze carefully. Distinguish facts from uncertainty and use available evidence."
+    study:
+      "Act as a patient tutor. Explain concepts step by step and use examples.",
+    coding:
+      "Act as an expert programmer. Give practical, correct code and explain important steps.",
+    creative:
+      "Be creative and original while following the user's request.",
+    research:
+      "Analyze carefully. Distinguish facts from uncertainty and use available evidence."
   };
 
   return prompts[mode] || prompts.normal;
 }
 
-// USER PROFILE INSTRUCTIONS
 function getProfilePrompt(profile) {
   const parts = [];
 
@@ -420,10 +470,9 @@ function getProfilePrompt(profile) {
   return parts.join("\n");
 }
 
-// MAIN NETLIFY FUNCTION
-export default async (request) => {
+/* ---------------- MAIN HANDLER ---------------- */
 
-  // CORS PREFLIGHT
+export default async function handler(request) {
   if (request.method === "OPTIONS") {
     return new Response(null, {
       status: 204,
@@ -432,63 +481,43 @@ export default async (request) => {
   }
 
   if (request.method !== "POST") {
-    return json(405, {
-      error: "Method not allowed"
-    });
+    return json(405, { error: "Method not allowed." });
   }
 
   try {
-    // AUTHENTICATION
     const token = (request.headers.get("authorization") || "")
       .replace(/^Bearer\s+/i, "");
 
     const user = await authenticate(token);
-
     const body = await request.json();
 
-    // SUPPORT OLD AND NEW FRONTEND FORMATS
-    const message =
-      typeof body.message === "string"
-        ? body.message
-        : "";
+    const {
+      message,
+      messages = [],
+      action = "chat",
+      webSearchEnabled = false,
+      mode = "normal",
+      temperature = 0.7
+    } = body;
 
-    const action = body.action || "chat";
-    const mode = body.mode || "normal";
-    const temperature = body.temperature ?? 0.7;
+    /* Memory actions */
 
-    const webSearchEnabled =
-      body.webSearchEnabled === true ||
-      body.webSearch === true;
-
-    const conversationInput = Array.isArray(body.messages)
-      ? body.messages
-      : Array.isArray(body.history)
-        ? body.history
-        : [];
-
-    // MEMORY: LIST
     if (action === "memory_list") {
       return json(200, {
-        success: true,
         memories: await listMemories(user.id, token)
       });
     }
 
-    // MEMORY: SAVE
     if (action === "memory_save") {
       if (
         typeof body.memory !== "string" ||
         !body.memory.trim()
       ) {
-        return json(400, {
-          error: "Memory is required"
-        });
+        return json(400, { error: "Memory is required." });
       }
 
       if (body.memory.length > 2000) {
-        return json(413, {
-          error: "Memory is too long"
-        });
+        return json(413, { error: "Memory is too long." });
       }
 
       await saveMemory(
@@ -498,96 +527,69 @@ export default async (request) => {
         token
       );
 
-      return json(200, {
-        success: true
-      });
+      return json(200, { success: true });
     }
 
-    // MEMORY: DELETE
     if (action === "memory_delete") {
       await deleteMemory(body.id, user.id, token);
-
-      return json(200, {
-        success: true
-      });
+      return json(200, { success: true });
     }
 
-    // MEMORY: CLEAR
     if (action === "memory_clear") {
       await clearMemories(user.id, token);
-
-      return json(200, {
-        success: true
-      });
+      return json(200, { success: true });
     }
 
-    // IMAGE GENERATION
+    /* Image generation */
+
     if (action === "generate_image") {
-      const prompt =
-        typeof body.prompt === "string"
-          ? body.prompt
-          : message;
-
-      if (!prompt.trim()) {
-        return json(400, {
-          error: "Image prompt is required"
-        });
+      if (
+        typeof body.prompt !== "string" ||
+        !body.prompt.trim()
+      ) {
+        return json(400, { error: "Image prompt is required." });
       }
 
-      if (prompt.length > 4000) {
-        return json(413, {
-          error: "Image prompt is too long"
-        });
+      if (body.prompt.length > 4000) {
+        return json(413, { error: "Image prompt is too long." });
       }
 
-      const image = await generateImage(prompt.trim());
-
-      const imageUrl =
-        `data:${image.mimeType};base64,${image.data}`;
+      const image = await generateImage(body.prompt.trim());
 
       return json(200, {
         success: true,
-        image,
-        imageUrl,
-        data: imageUrl,
-        reply: "Image generated successfully."
+        image
       });
     }
 
-    // CHAT VALIDATION
-    const userMessage = message.trim();
+    /* Chat validation */
 
-    if (!userMessage) {
-      return json(400, {
-        error: "Message is required"
-      });
+    if (typeof message !== "string" || !message.trim()) {
+      return json(400, { error: "Message is required." });
     }
 
-    if (userMessage.length > 30000) {
-      return json(413, {
-        error: "Message is too long"
-      });
+    if (message.length > 30000) {
+      return json(413, { error: "Message is too long." });
     }
 
-    // LOAD USER PROFILE
+    /* Load profile */
+
     let profile = {};
 
     try {
       profile = await loadProfile(user.id, token);
     } catch (error) {
-      console.error(
-        "Profile loading error:",
-        error.message
-      );
+      console.error("Profile loading error:", error.message);
     }
 
-    // WEB SEARCH
+    /* Optional web search */
+
     let searchContext = "";
     let webSearchUsed = false;
 
     if (webSearchEnabled) {
       try {
-        const results = await webSearch(userMessage);
+        const results = await webSearch(message);
 
         searchContext = `
 Web search results:
@@ -599,12 +601,8 @@ If the results do not answer the question, say so.
 `;
 
         webSearchUsed = true;
-
       } catch (error) {
-        console.error(
-          "Web search error:",
-          error.message
-        );
+        console.error("Web search error:", error.message);
 
         searchContext = `
 Web search was requested but is unavailable for this request.
@@ -613,7 +611,8 @@ Do not pretend that a web search succeeded.
       }
     }
 
-    // LOAD SAVED MEMORIES
+    /* Load memories */
+
     let memoryContext = "";
     let memoryUsed = false;
 
@@ -630,15 +629,10 @@ Do not pretend that a web search succeeded.
 
         memoryUsed = true;
       }
-
     } catch (error) {
-      console.error(
-        "Memory loading error:",
-        error.message
-      );
+      console.error("Memory loading error:", error.message);
     }
 
-    // BUILD SYSTEM INSTRUCTIONS
     const profileContext = getProfilePrompt(profile);
     const modeContext = getModePrompt(mode);
 
@@ -650,20 +644,13 @@ Do not pretend that a web search succeeded.
       searchContext
     ].filter(Boolean).join("\n\n");
 
-    // PREPARE CONVERSATION HISTORY
-    const conversation = conversationInput
-      .slice(-20)
-      .filter(item =>
-        item &&
-        ["user", "assistant"].includes(item.role) &&
-        typeof item.content === "string"
-      )
-      .map(item => ({
-        role: item.role,
-        content: item.content.slice(0, 12000)
-      }));
+    const conversation = Array.isArray(messages)
+      ? messages.slice(-20).map(item => ({
+          role: item.role === "assistant" ? "assistant" : "user",
+          content: String(item.content || "").slice(0, 12000)
+        }))
+      : [];
 
-    // COMPLETE MESSAGE ARRAY
     const fullMessages = [
       {
         role: "system",
@@ -672,32 +659,24 @@ Do not pretend that a web search succeeded.
       ...conversation,
       {
         role: "user",
-        content: userMessage
+        content: message
       }
     ];
 
-    // TEMPERATURE
-    const numericTemperature = Number(temperature);
-
     const safeTemperature = Math.min(
       1.5,
-      Math.max(
-        0,
-        Number.isFinite(numericTemperature)
-          ? numericTemperature
-          : 0.7
-      )
+      Math.max(0, Number(temperature) || 0.7)
     );
 
-    // AI PROVIDERS
     let answer = "";
     let provider = "groq";
     let groqErrorMessage = "";
 
-    // GROQ PRIMARY, GEMINI BACKUP
+    /* Groq primary, Gemini fallback */
+
     try {
       if (!process.env.GROQ_API_KEY) {
-        throw new Error("Groq API key missing");
+        throw new Error("GROQ_API_KEY is missing.");
       }
 
       answer = await callGroq(
@@ -705,14 +684,9 @@ Do not pretend that a web search succeeded.
         process.env.GROQ_API_KEY,
         safeTemperature
       );
-
     } catch (error) {
       groqErrorMessage = error.message;
-
-      console.error(
-        "Groq error:",
-        groqErrorMessage
-      );
+      console.error("Groq error:", groqErrorMessage);
 
       if (!process.env.GEMINI_API_KEY) {
         throw new Error(
@@ -731,18 +705,13 @@ Do not pretend that a web search succeeded.
       );
     }
 
-    if (!answer || !answer.trim()) {
-      throw new Error("The AI returned an empty response");
+    if (!answer.trim()) {
+      throw new Error("The AI returned an empty response.");
     }
 
-    // SUCCESS RESPONSE
     return json(200, {
       success: true,
-
-      // Both response formats
       answer,
-      reply: answer,
-
       provider,
       memoryUsed,
       webSearchUsed,
@@ -752,20 +721,16 @@ Do not pretend that a web search succeeded.
   } catch (error) {
     console.error("QuBix error:", error);
 
-    const errorMessage =
-      error.message || "Something went wrong";
+    const message = error.message || "Something went wrong.";
 
     const statusCode =
-      errorMessage.toLowerCase().includes("authentication") ||
-      errorMessage.toLowerCase().includes("session") ||
-      errorMessage.toLowerCase().includes("expired")
+      message.includes("Authentication") ||
+      message.includes("session")
         ? 401
         : 500;
 
     return json(statusCode, {
-      success: false,
-      error: errorMessage,
-      reply: errorMessage
+      error: message
     });
   }
-};
+}
