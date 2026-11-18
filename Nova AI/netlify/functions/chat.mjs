@@ -37,6 +37,7 @@ function getSupabaseHeaders(token) {
   };
 }
 
+// GROQ AI
 async function callGroq(messages, apiKey, temperature = 0.7) {
   const response = await fetch(
     "https://api.groq.com/openai/v1/chat/completions",
@@ -65,6 +66,7 @@ async function callGroq(messages, apiKey, temperature = 0.7) {
   return data.choices?.[0]?.message?.content || "";
 }
 
+// GEMINI HISTORY FORMAT
 function prepareGeminiContents(messages) {
   const contents = [];
 
@@ -95,7 +97,13 @@ function prepareGeminiContents(messages) {
   return contents;
 }
 
-async function callGemini(messages, apiKey, systemInstruction, temperature = 0.7) {
+// GEMINI BACKUP AI
+async function callGemini(
+  messages,
+  apiKey,
+  systemInstruction,
+  temperature = 0.7
+) {
   const contents = prepareGeminiContents(messages);
 
   if (!contents.length) {
@@ -106,7 +114,9 @@ async function callGemini(messages, apiKey, systemInstruction, temperature = 0.7
     `https://generativelanguage.googleapis.com/v1beta/models/${MODELS.gemini}:generateContent?key=${encodeURIComponent(apiKey)}`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json"
+      },
       body: JSON.stringify({
         systemInstruction: {
           parts: [{ text: systemInstruction }]
@@ -131,22 +141,28 @@ async function callGemini(messages, apiKey, systemInstruction, temperature = 0.7
     .join("") || "";
 }
 
+// WEB SEARCH
 async function webSearch(query) {
   if (!process.env.TAVILY_API_KEY) {
     throw new Error("Web search is not configured");
   }
 
-  const response = await fetch("https://api.tavily.com/search", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      api_key: process.env.TAVILY_API_KEY,
-      query,
-      search_depth: "basic",
-      max_results: 5,
-      include_answer: true
-    })
-  });
+  const response = await fetch(
+    "https://api.tavily.com/search",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        api_key: process.env.TAVILY_API_KEY,
+        query,
+        search_depth: "basic",
+        max_results: 5,
+        include_answer: true
+      })
+    }
+  );
 
   const data = await response.json();
 
@@ -164,6 +180,7 @@ async function webSearch(query) {
   };
 }
 
+// IMAGE GENERATION
 async function generateImage(prompt) {
   if (!process.env.GEMINI_API_KEY) {
     throw new Error("Image generation is not configured");
@@ -173,7 +190,9 @@ async function generateImage(prompt) {
     `https://generativelanguage.googleapis.com/v1beta/models/${MODELS.image}:generateContent?key=${encodeURIComponent(process.env.GEMINI_API_KEY)}`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json"
+      },
       body: JSON.stringify({
         contents: [{
           parts: [{ text: prompt }]
@@ -195,7 +214,9 @@ async function generateImage(prompt) {
   const imagePart = parts.find(part => part.inlineData?.data);
 
   if (!imagePart) {
-    throw new Error("No image was returned");
+    throw new Error(
+      parts.find(part => part.text)?.text || "No image was returned"
+    );
   }
 
   return {
@@ -204,6 +225,7 @@ async function generateImage(prompt) {
   };
 }
 
+// SUPABASE AUTHENTICATION
 async function authenticate(token) {
   if (
     !token ||
@@ -230,6 +252,7 @@ async function authenticate(token) {
   return response.json();
 }
 
+// LOAD USER PROFILE
 async function loadProfile(userId, token) {
   const url = new URL(
     `${process.env.SUPABASE_URL}/rest/v1/qubix_profiles`
@@ -254,6 +277,7 @@ async function loadProfile(userId, token) {
   return rows?.[0] || {};
 }
 
+// SAVE MEMORY
 async function saveMemory(userId, memory, category, token) {
   const url = new URL(
     `${process.env.SUPABASE_URL}/rest/v1/qubix_memories`
@@ -281,12 +305,16 @@ async function saveMemory(userId, memory, category, token) {
   return true;
 }
 
+// LIST MEMORIES
 async function listMemories(userId, token) {
   const url = new URL(
     `${process.env.SUPABASE_URL}/rest/v1/qubix_memories`
   );
 
-  url.searchParams.set("select", "id,memory,category,created_at");
+  url.searchParams.set(
+    "select",
+    "id,memory,category,created_at"
+  );
   url.searchParams.set("user_id", `eq.${userId}`);
   url.searchParams.set("order", "created_at.desc");
   url.searchParams.set("limit", "100");
@@ -302,8 +330,11 @@ async function listMemories(userId, token) {
   return response.json();
 }
 
+// DELETE ONE MEMORY
 async function deleteMemory(id, userId, token) {
-  if (!id) throw new Error("Memory ID is required");
+  if (!id) {
+    throw new Error("Memory ID is required");
+  }
 
   const url = new URL(
     `${process.env.SUPABASE_URL}/rest/v1/qubix_memories`
@@ -324,6 +355,7 @@ async function deleteMemory(id, userId, token) {
   return true;
 }
 
+// CLEAR ALL MEMORIES
 async function clearMemories(userId, token) {
   const url = new URL(
     `${process.env.SUPABASE_URL}/rest/v1/qubix_memories`
@@ -343,6 +375,7 @@ async function clearMemories(userId, token) {
   return true;
 }
 
+// AI MODES
 function getModePrompt(mode) {
   const prompts = {
     normal: "Answer naturally and helpfully.",
@@ -355,10 +388,12 @@ function getModePrompt(mode) {
   return prompts[mode] || prompts.normal;
 }
 
+// USER PROFILE INSTRUCTIONS
 function getProfilePrompt(profile) {
   const parts = [];
 
   const language = profile.preferred_language || "auto";
+
   if (language !== "auto") {
     parts.push(`Preferred response language: ${language}.`);
   }
@@ -384,51 +419,76 @@ function getProfilePrompt(profile) {
 
   return parts.join("\n");
 }
+
+// MAIN NETLIFY FUNCTION
 export default async (request) => {
-if (request.method === "OPTIONS") {
-  return new Response(null, {
-    status: 204,
-    headers: HEADERS
-  });
-}
+
+  // CORS PREFLIGHT
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: HEADERS
+    });
+  }
 
   if (request.method !== "POST") {
-    return json(405, { error: "Method not allowed" });
+    return json(405, {
+      error: "Method not allowed"
+    });
   }
 
   try {
+    // AUTHENTICATION
     const token = (request.headers.get("authorization") || "")
       .replace(/^Bearer\s+/i, "");
 
     const user = await authenticate(token);
+
     const body = await request.json();
 
-    const {
-      message,
-      messages = [],
-      action = "chat",
-      webSearchEnabled = false,
-      mode = "normal",
-      temperature = 0.7
-    } = body;
+    // SUPPORT OLD AND NEW FRONTEND FORMATS
+    const message =
+      typeof body.message === "string"
+        ? body.message
+        : "";
 
-    // Memory actions
+    const action = body.action || "chat";
+    const mode = body.mode || "normal";
+    const temperature = body.temperature ?? 0.7;
+
+    const webSearchEnabled =
+      body.webSearchEnabled === true ||
+      body.webSearch === true;
+
+    const conversationInput = Array.isArray(body.messages)
+      ? body.messages
+      : Array.isArray(body.history)
+        ? body.history
+        : [];
+
+    // MEMORY: LIST
     if (action === "memory_list") {
       return json(200, {
+        success: true,
         memories: await listMemories(user.id, token)
       });
     }
 
+    // MEMORY: SAVE
     if (action === "memory_save") {
       if (
         typeof body.memory !== "string" ||
         !body.memory.trim()
       ) {
-        return json(400, { error: "Memory is required" });
+        return json(400, {
+          error: "Memory is required"
+        });
       }
 
       if (body.memory.length > 2000) {
-        return json(413, { error: "Memory is too long" });
+        return json(413, {
+          error: "Memory is too long"
+        });
       }
 
       await saveMemory(
@@ -438,65 +498,96 @@ if (request.method === "OPTIONS") {
         token
       );
 
-      return json(200, { success: true });
-    }
-
-    if (action === "memory_delete") {
-      await deleteMemory(body.id, user.id, token);
-      return json(200, { success: true });
-    }
-
-    if (action === "memory_clear") {
-      await clearMemories(user.id, token);
-      return json(200, { success: true });
-    }
-
-    // Image generation
-    if (action === "generate_image") {
-      if (
-        typeof body.prompt !== "string" ||
-        !body.prompt.trim()
-      ) {
-        return json(400, { error: "Image prompt is required" });
-      }
-
-      if (body.prompt.length > 4000) {
-        return json(413, { error: "Image prompt is too long" });
-      }
-
-      const image = await generateImage(body.prompt.trim());
-
       return json(200, {
-        success: true,
-        image
+        success: true
       });
     }
 
-    // Chat validation
-    if (typeof message !== "string" || !message.trim()) {
-      return json(400, { error: "Message is required" });
+    // MEMORY: DELETE
+    if (action === "memory_delete") {
+      await deleteMemory(body.id, user.id, token);
+
+      return json(200, {
+        success: true
+      });
     }
 
-    if (message.length > 30000) {
-      return json(413, { error: "Message is too long" });
+    // MEMORY: CLEAR
+    if (action === "memory_clear") {
+      await clearMemories(user.id, token);
+
+      return json(200, {
+        success: true
+      });
     }
 
-    // Load user profile
+    // IMAGE GENERATION
+    if (action === "generate_image") {
+      const prompt =
+        typeof body.prompt === "string"
+          ? body.prompt
+          : message;
+
+      if (!prompt.trim()) {
+        return json(400, {
+          error: "Image prompt is required"
+        });
+      }
+
+      if (prompt.length > 4000) {
+        return json(413, {
+          error: "Image prompt is too long"
+        });
+      }
+
+      const image = await generateImage(prompt.trim());
+
+      const imageUrl =
+        `data:${image.mimeType};base64,${image.data}`;
+
+      return json(200, {
+        success: true,
+        image,
+        imageUrl,
+        data: imageUrl,
+        reply: "Image generated successfully."
+      });
+    }
+
+    // CHAT VALIDATION
+    const userMessage = message.trim();
+
+    if (!userMessage) {
+      return json(400, {
+        error: "Message is required"
+      });
+    }
+
+    if (userMessage.length > 30000) {
+      return json(413, {
+        error: "Message is too long"
+      });
+    }
+
+    // LOAD USER PROFILE
     let profile = {};
 
     try {
       profile = await loadProfile(user.id, token);
     } catch (error) {
-      console.error("Profile loading error:", error.message);
+      console.error(
+        "Profile loading error:",
+        error.message
+      );
     }
 
-    // Optional web search
+    // WEB SEARCH
     let searchContext = "";
     let webSearchUsed = false;
 
     if (webSearchEnabled) {
       try {
-        const results = await webSearch(message);
+        const results = await webSearch(userMessage);
 
         searchContext = `
 Web search results:
@@ -508,8 +599,13 @@ If the results do not answer the question, say so.
 `;
 
         webSearchUsed = true;
+
       } catch (error) {
-        console.error("Web search error:", error.message);
+        console.error(
+          "Web search error:",
+          error.message
+        );
+
         searchContext = `
 Web search was requested but is unavailable for this request.
 Do not pretend that a web search succeeded.
@@ -517,7 +613,7 @@ Do not pretend that a web search succeeded.
       }
     }
 
-    // Load saved user memories
+    // LOAD SAVED MEMORIES
     let memoryContext = "";
     let memoryUsed = false;
 
@@ -534,10 +630,15 @@ Do not pretend that a web search succeeded.
 
         memoryUsed = true;
       }
+
     } catch (error) {
-      console.error("Memory loading error:", error.message);
+      console.error(
+        "Memory loading error:",
+        error.message
+      );
     }
 
+    // BUILD SYSTEM INSTRUCTIONS
     const profileContext = getProfilePrompt(profile);
     const modeContext = getModePrompt(mode);
 
@@ -549,13 +650,20 @@ Do not pretend that a web search succeeded.
       searchContext
     ].filter(Boolean).join("\n\n");
 
-    const conversation = Array.isArray(messages)
-      ? messages.slice(-20).map(item => ({
-          role: item.role === "assistant" ? "assistant" : "user",
-          content: String(item.content || "").slice(0, 12000)
-        }))
-      : [];
+    // PREPARE CONVERSATION HISTORY
+    const conversation = conversationInput
+      .slice(-20)
+      .filter(item =>
+        item &&
+        ["user", "assistant"].includes(item.role) &&
+        typeof item.content === "string"
+      )
+      .map(item => ({
+        role: item.role,
+        content: item.content.slice(0, 12000)
+      }));
 
+    // COMPLETE MESSAGE ARRAY
     const fullMessages = [
       {
         role: "system",
@@ -564,20 +672,29 @@ Do not pretend that a web search succeeded.
       ...conversation,
       {
         role: "user",
-        content: message
+        content: userMessage
       }
     ];
 
+    // TEMPERATURE
+    const numericTemperature = Number(temperature);
+
     const safeTemperature = Math.min(
       1.5,
-      Math.max(0, Number(temperature) || 0.7)
+      Math.max(
+        0,
+        Number.isFinite(numericTemperature)
+          ? numericTemperature
+          : 0.7
+      )
     );
 
+    // AI PROVIDERS
     let answer = "";
     let provider = "groq";
     let groqErrorMessage = "";
 
-    // Groq primary, Gemini fallback
+    // GROQ PRIMARY, GEMINI BACKUP
     try {
       if (!process.env.GROQ_API_KEY) {
         throw new Error("Groq API key missing");
@@ -588,9 +705,14 @@ Do not pretend that a web search succeeded.
         process.env.GROQ_API_KEY,
         safeTemperature
       );
+
     } catch (error) {
       groqErrorMessage = error.message;
-      console.error("Groq error:", groqErrorMessage);
+
+      console.error(
+        "Groq error:",
+        groqErrorMessage
+      );
 
       if (!process.env.GEMINI_API_KEY) {
         throw new Error(
@@ -609,13 +731,18 @@ Do not pretend that a web search succeeded.
       );
     }
 
-    if (!answer.trim()) {
+    if (!answer || !answer.trim()) {
       throw new Error("The AI returned an empty response");
     }
 
+    // SUCCESS RESPONSE
     return json(200, {
       success: true,
+
+      // Both response formats
       answer,
+      reply: answer,
+
       provider,
       memoryUsed,
       webSearchUsed,
@@ -625,16 +752,20 @@ Do not pretend that a web search succeeded.
   } catch (error) {
     console.error("QuBix error:", error);
 
-    const message = error.message || "Something went wrong";
+    const errorMessage =
+      error.message || "Something went wrong";
 
     const statusCode =
-      message.includes("Authentication") ||
-      message.includes("session")
+      errorMessage.toLowerCase().includes("authentication") ||
+      errorMessage.toLowerCase().includes("session") ||
+      errorMessage.toLowerCase().includes("expired")
         ? 401
         : 500;
 
     return json(statusCode, {
-      error: message
+      success: false,
+      error: errorMessage,
+      reply: errorMessage
     });
   }
 };
