@@ -8,7 +8,7 @@ const HEADERS = {
 const MODELS = {
   groq: "openai/gpt-oss-20b",
   gemini: "gemini-2.5-flash",
-  imagePrimary: "gemini-3.1-flash-image",
+  imagePrimary: "gemini-2.5-flash-image",
   imageFallback: "gemini-2.5-flash-image"
 };
 
