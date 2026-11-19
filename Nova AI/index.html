@@ -16,6 +16,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.9.0/mammoth.browser.min.js"></script>
 <style>
 :root{
   --bg:#10111a;--panel:#171923;--panel2:#202331;--text:#f4f5fa;
@@ -78,7 +80,7 @@ select,.select{background:var(--panel);border:1px solid var(--line);border-radiu
 .message-actions{display:flex;gap:5px;margin-top:8px;flex-wrap:wrap}
 .message-actions button{background:transparent;border:1px solid var(--line);color:var(--muted);border-radius:7px;padding:5px 8px;font-size:11px}
 .message-actions button:hover{color:var(--text);background:var(--panel2)}
-.generated-image{max-width:100%;border-radius:12px;margin-top:10px;display:block}
+.generated-image{max-width:100%;border-radius:12px;margin-top:10px;display:block}.image-download{display:inline-block;margin-top:8px;color:#a99cff;font-size:13px}.stop-btn{background:#713b45;color:#fff;border:0;border-radius:9px;padding:9px 12px;font-weight:600}.voice-language{max-width:125px;font-size:11px;padding:7px}
 .composer-wrap{position:fixed;bottom:0;left:270px;right:0;padding:15px 20px 18px;background:linear-gradient(transparent,var(--bg) 18%)}
 .composer{max-width:850px;margin:auto;background:var(--panel);border:1px solid var(--line);border-radius:17px;padding:11px 13px;box-shadow:var(--shadow)}
 #messageInput{width:100%;resize:none;min-height:48px;max-height:180px;background:transparent;border:0;outline:0;color:var(--text);padding:8px;font-size:14px}
@@ -183,7 +185,9 @@ body.light .message-content pre{background:#f0f1f6;color:#202234}
           <input id="fileInput" type="file" hidden accept=".txt,.md,.csv,.json,.pdf,.docx,.png,.jpg,.jpeg,.webp">
           <button class="tool-btn" id="imageBtn" title="Generate an image">▧ Image</button>
           <button class="tool-btn" id="voiceBtn" title="Voice input">🎙 Voice</button>
+          <select id="voiceLanguage" class="voice-language" title="Voice language"><option value="en-US">English</option><option value="ur-PK">Urdu</option><option value="hi-IN">Hindi</option><option value="pa-IN">Punjabi</option></select>
           <label class="toggle"><input type="checkbox" id="webToggle"> Web search</label>
+          <button class="stop-btn" id="stopBtn" type="button" hidden>Stop</button>
           <button class="send-btn" id="sendBtn">Send ↑</button>
         </div>
       </div>
@@ -212,9 +216,7 @@ body.light .message-content pre{background:#f0f1f6;color:#202234}
 </div>
 
 <script>
-"use strict";
-
-/* FIX: DOM helper must be declared before first use */
+"use strict";/* FIX: DOM helper must be declared before first use */
 const $ = id => document.getElementById(id);
 
 /* PWA install support */
@@ -268,6 +270,7 @@ let currentMessages = [];
 let attachedFile = null;
 let attachedText = "";
 let isSending = false;
+let activeRequestController = null;
 let authMode = "signin";
 let memories = [];
 let profile = {
@@ -320,7 +323,7 @@ async function getToken() {
   return currentSession.access_token;
 }
 
-async function apiRequest(payload) {
+async function apiRequest(payload, signal) {
   const token = await getToken();
   if(!token) throw new Error("Please sign in first.");
 
@@ -330,7 +333,8 @@ async function apiRequest(payload) {
       "Content-Type":"application/json",
       "Authorization":"Bearer "+token
     },
-    body:JSON.stringify(payload)
+    body:JSON.stringify(payload),
+    signal
   });
 
   const data = await response.json().catch(()=>({}));
@@ -342,6 +346,7 @@ function setLoading(value) {
   isSending=value;
   $("sendBtn").disabled=value;
   $("sendBtn").textContent=value?"Working...":"Send ↑";
+  $("stopBtn").hidden=!value;
 }
 
 function showWelcome(show) {
@@ -430,8 +435,7 @@ function renderChats() {
     name.className="chat-name";
     name.textContent=chat.title||"New chat";
 
-    const menu=document.createElement("button");
-    menu.className="icon-btn";
+    const menu=document.createElement("button");    menu.className="icon-btn";
     menu.textContent="⋯";
     menu.title="Chat options";
     menu.onclick=e=>{
@@ -595,13 +599,14 @@ async function sendMessage(forcedMessage=null) {
     await updateChatTitleFromMessage(message||"Attached file");
 
     const history=currentMessages.slice(0,-1).slice(-20);
+    activeRequestController=new AbortController();
     const data=await apiRequest({
       message:actualMessage,
       messages:history,
       action:"chat",
       mode:$("modeSelect").value,
       webSearchEnabled:$("webToggle").checked
-    });
+    },activeRequestController.signal);
 
     const answer=data.answer||"I couldn't generate an answer.";
     currentMessages.push({role:"assistant",content:answer});
@@ -612,10 +617,16 @@ async function sendMessage(forcedMessage=null) {
     await loadChats();
   } catch(error) {
     typing.remove();
-    currentMessages.pop();
+    if(error.name==="AbortError") {
+      currentMessages.push({role:"assistant",content:"The request was stopped."});
+      try { await saveMessage("assistant","The request was stopped."); } catch {}
+    } else {
+      currentMessages.pop();
+      toast(error.message||"Something went wrong.");
+    }
     renderMessages();
-    toast(error.message||"Something went wrong.");
   } finally {
+    activeRequestController=null;
     setLoading(false);
     input.focus();
   }
@@ -662,9 +673,7 @@ async function copyText(text) {
   } catch {
     toast("Copy failed. Please select the text manually.");
   }
-}
-
-function chatOptions(chat) {
+}function chatOptions(chat) {
   showModal(`
     <h2>Chat options</h2>
     <p style="color:var(--muted)">${escapeHTML(chat.title||"Chat")}</p>
@@ -783,9 +792,7 @@ async function shareChat(id) {
     $("shareStatus").textContent=
       "Share link could not be created. Make sure the qubix_shares table and sharing SQL migration have been executed. Details: "+error.message;
   }
-}
-
-async function loadProfile() {
+}async function loadProfile() {
   if(!currentUser) return;
   const {data,error}=await db.from("qubix_profiles")
     .select("*").eq("user_id",currentUser.id).maybeSingle();
@@ -947,100 +954,147 @@ function clearAttachment() {
 
 async function handleFile(file) {
   if(!file) return;
-  const maxSize=5*1024*1024;
+  const maxSize=10*1024*1024;
   if(file.size>maxSize) {
-    toast("File is too large. Maximum size is 5 MB.");
+    toast("File is too large. Maximum size is 10 MB.");
     return;
   }
-
   const ext=file.name.split(".").pop().toLowerCase();
-  if(!["txt","md","csv","json"].includes(ext)) {
-    toast("This file type is not yet supported for text extraction. Use TXT, MD, CSV or JSON.");
-    return;
-  }
-
   try {
-    attachedText=await file.text();
+    toast("Reading file...");
+    let extracted="";
+    if(["txt","md","csv","json","html","css","js","py","log","xml"].includes(ext)) {
+      extracted=await file.text();
+    } else if(ext==="pdf") {
+      if(!window.pdfjsLib) throw new Error("PDF reader library did not load. Refresh and try again.");
+      pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+      const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
+      const pages=[];
+      for(let i=1;i<=pdf.numPages;i++) {
+        const page=await pdf.getPage(i);
+        const content=await page.getTextContent();
+        pages.push(content.items.map(item=>item.str).join(" "));
+      }
+      extracted=pages.join("\n\n");
+      if(!extracted.trim()) throw new Error("This PDF appears scanned or contains no selectable text. OCR is not enabled yet.");
+    } else if(ext==="docx") {
+      if(!window.mammoth) throw new Error("DOCX reader library did not load. Refresh and try again.");
+      const result=await mammoth.extractRawText({arrayBuffer:await file.arrayBuffer()});
+      extracted=result.value||"";
+    } else if(["png","jpg","jpeg","webp"].includes(ext)) {
+      throw new Error("Image attachments are not yet connected to image understanding. Attach a text, PDF or DOCX file instead.");
+    } else {
+      throw new Error("Supported: TXT, MD, CSV, JSON, HTML, CSS, JS, PY, LOG, XML, PDF and DOCX.");
+    }
+    if(!extracted.trim()) throw new Error("No readable text was found in this file.");
+    attachedText=extracted.slice(0,50000);
     attachedFile=file;
     $("fileChip").hidden=false;
     $("fileChip").textContent="Attached: "+file.name+" · "+Math.round(file.size/1024)+" KB";
-    toast("File attached.");
-  } catch {
-    toast("Could not read this file.");
+    toast("File ready. Its text will be included with your message.");
+  } catch(error) {
+    attachedText=""; attachedFile=null;
+    $("fileChip").hidden=true;
+    toast(error.message||"Could not read this file.");
   }
-}
-
-async function generateImageFromPrompt(promptText) {
+}async function generateImageFromPrompt(promptText) {
   if(!currentUser) {
     toast("Sign in to generate images.");
     setAuthScreen(true);
     return;
   }
-  if(!promptText.trim()) return;
+  promptText=String(promptText||"").trim();
+  if(!promptText) return;
+  if(isSending) return toast("Wait for the current request to finish.");
+  if(!currentChatId) await createChat();
+  if(!currentChatId) return;
 
   setLoading(true);
   const userMessage={role:"user",content:"Generate an image: "+promptText};
   currentMessages.push(userMessage);
   renderMessages();
-
+  const status=document.createElement("div");
+  status.className="typing";
+  status.textContent="QuBix is generating your image...";
+  $("messages").appendChild(status);
   try {
     await saveMessage("user",userMessage.content);
-    const data=await apiRequest({action:"generate_image",prompt:promptText});
-    if(!data.image?.data) throw new Error("No image returned.");
-
+    activeRequestController=new AbortController();
+    const data=await apiRequest({action:"generate_image",prompt:promptText},activeRequestController.signal);
+    if(!data.image?.data) throw new Error("No image data returned. Check Gemini image model access and quota.");
     const mime=data.image.mimeType||"image/png";
     const imageUrl="data:"+mime+";base64,"+data.image.data;
-    const message={role:"assistant",content:"Your image has been generated."};
-    currentMessages.push(message);
-    await saveMessage("assistant",message.content);
+    const assistantMessage={role:"assistant",content:"Your image has been generated." , imageData:imageUrl};
+    currentMessages.push(assistantMessage);
+    await saveMessage("assistant",assistantMessage.content);
+    status.remove();
     renderMessages();
-
     const last=$("messages").lastElementChild;
     const image=document.createElement("img");
     image.className="generated-image";
     image.src=imageUrl;
-    image.alt="Generated image";
-
+    image.alt="Generated image for: "+promptText;
     const download=document.createElement("a");
+    download.className="image-download";
     download.href=imageUrl;
-    download.download="qubix-generated-image.png";
-    download.textContent="Download image";
-    download.style.cssText="display:inline-block;margin-top:8px;color:#a99cff;font-size:13px";
-
-    last.querySelector(".message-content").append(image,download);
+    download.download="qubix-generated-image."+(mime.includes("jpeg")?"jpg":mime.includes("webp")?"webp":"png");
+    download.textContent="↓ Download image";
+    const messageContent=last?.querySelector(".message-content");
+    if(messageContent) messageContent.append(image,download);
     $("content").scrollTop=$("content").scrollHeight;
+    toast("Image generated successfully.");
   } catch(error) {
-    currentMessages.pop();
+    status.remove();
+    if(error.name==="AbortError") {
+      currentMessages.push({role:"assistant",content:"Image generation was stopped."});
+    } else {
+      currentMessages.push({role:"assistant",content:"Image generation failed: "+(error.message||"Unknown error")});
+    }
     renderMessages();
-    toast(error.message);
+    toast(error.name==="AbortError"?"Request stopped.":error.message);
   } finally {
+    activeRequestController=null;
     setLoading(false);
   }
 }
-
 function startVoiceInput() {
   const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SpeechRecognition) {
-    toast("Voice input is not supported in this browser.");
+    toast("Voice input is not supported in this browser. Try Chrome or Edge.");
     return;
   }
-
   const recognition=new SpeechRecognition();
-  recognition.lang="en-US";
-  recognition.interimResults=false;
+  recognition.lang=$("voiceLanguage").value||"en-US";
+  recognition.interimResults=true;
+  recognition.continuous=false;
   recognition.maxAlternatives=1;
-
-  $("voiceBtn").textContent="Listening...";
+  const button=$("voiceBtn");
+  const original=button.textContent;
+  button.textContent="Listening...";
+  button.classList.add("active");
+  let finalText="";
   recognition.onresult=event=>{
-    const result=event.results[0][0].transcript;
-    $("messageInput").value+=($("messageInput").value?" ":"")+result;
-    $("messageInput").dispatchEvent(new Event("input"));
+    let interim="";
+    for(let i=event.resultIndex;i<event.results.length;i++) {
+      const transcript=event.results[i][0].transcript;
+      if(event.results[i].isFinal) finalText+=transcript;
+      else interim+=transcript;
+    }
+    const input=$("messageInput");
+    input.value=(input.dataset.voiceBase||"")+(finalText||interim);
+    input.dispatchEvent(new Event("input"));
   };
-  recognition.onerror=()=>toast("Voice input failed.");
-  recognition.onend=()=>$("voiceBtn").textContent="🎙 Voice";
-  recognition.start();
+  recognition.onerror=event=>toast("Voice input error: "+event.error);
+  recognition.onend=()=>{
+    button.textContent=original;
+    button.classList.remove("active");
+    delete $("messageInput").dataset.voiceBase;
+  };
+  $("messageInput").dataset.voiceBase=$("messageInput").value.trim()
+    ?$("messageInput").value.trim()+" ":"";
+  try { recognition.start(); }
+  catch(error) { button.textContent=original; button.classList.remove("active"); toast(error.message); }
 }
-
 async function authSubmit() {
   const email=$("authEmail").value.trim();
   const password=$("authPassword").value;
@@ -1131,6 +1185,7 @@ function forgotPassword() {
 /* UI events */
 $("newChatBtn").onclick=createChat;
 $("sendBtn").onclick=()=>sendMessage();
+$("stopBtn").onclick=()=>{ if(activeRequestController) activeRequestController.abort(); toast("Stopping request..."); };
 $("messageInput").addEventListener("keydown",e=>{
   if(e.key==="Enter"&&!e.shiftKey) {
     e.preventDefault();
