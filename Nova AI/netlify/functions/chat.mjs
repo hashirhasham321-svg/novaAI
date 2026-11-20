@@ -8,7 +8,7 @@ const HEADERS = {
 const MODELS = {
   groq: "openai/gpt-oss-20b",
   gemini: "gemini-2.5-flash",
-  imagePrimary: "gemini-2.5-flash-image",
+  imagePrimary: "gemini-3.1-flash-image",
   imageFallback: "gemini-2.5-flash-image"
 };
 
@@ -275,6 +275,83 @@ async function generateImage(prompt) {
   }
 }
 
+/* ---------------- IMAGE UNDERSTANDING ---------------- */
+
+async function analyzeImage(prompt, image, apiKey) {
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY is missing in Netlify environment variables.");
+  }
+
+  if (!image || typeof image.data !== "string") {
+    throw new Error("Please attach an image.");
+  }
+
+  const allowedTypes = [
+    "image/jpeg",
+    "image/png",
+    "image/webp"
+  ];
+
+  if (!allowedTypes.includes(image.mimeType)) {
+    throw new Error("Supported image formats are JPG, PNG and WEBP.");
+  }
+
+  if (image.data.length > 9000000) {
+    throw new Error("Image is too large. Please use a smaller image.");
+  }
+
+  const response = await fetch(
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey
+      },
+      body: JSON.stringify({
+        contents: [{
+          role: "user",
+          parts: [
+            {
+              text: String(prompt || "Describe this image.").slice(0, 5000)
+            },
+            {
+              inlineData: {
+                mimeType: image.mimeType,
+                data: image.data
+              }
+            }
+          ]
+        }],
+        generationConfig: {
+          temperature: 0.4,
+          maxOutputTokens: 4096
+        }
+      })
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data.error?.message ||
+      `Image analysis failed (${response.status}).`
+    );
+  }
+
+  const answer = data.candidates?.[0]?.content?.parts
+    ?.filter(part => part.text)
+    .map(part => part.text)
+    .join("") || "";
+
+  if (!answer.trim()) {
+    throw new Error("Gemini could not analyze this image.");
+  }
+
+  return answer;
+}
+
 /* ---------------- AUTHENTICATION ---------------- */
 
 async function authenticate(token) {
@@ -538,6 +615,23 @@ export default async function handler(request) {
     if (action === "memory_clear") {
       await clearMemories(user.id, token);
       return json(200, { success: true });
+    }
+
+    /* Image understanding */
+
+    if (action === "analyze_image") {
+      const answer = await analyzeImage(
+        message || "Describe this image.",
+        body.image,
+        process.env.GEMINI_API_KEY
+      );
+
+      return json(200, {
+        success: true,
+        answer,
+        provider: "gemini",
+        action: "analyze_image"
+      });
     }
 
     /* Image generation */
