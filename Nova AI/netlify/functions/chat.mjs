@@ -7,9 +7,17 @@ const HEADERS = {
 
 const MODELS = {
   groq: "openai/gpt-oss-20b",
+  groqLarge: "openai/gpt-oss-120b",
   gemini: "gemini-2.5-flash",
   imagePrimary: "gemini-3.1-flash-image",
   imageFallback: "gemini-2.5-flash-image"
+};
+
+/* Keys here must match the <option> values of #modelSelect in index.html */
+const MODEL_CATALOG = {
+  groq:         { provider: "groq",   model: MODELS.groq },
+  "groq-large": { provider: "groq",   model: MODELS.groqLarge },
+  gemini:       { provider: "gemini", model: MODELS.gemini }
 };
 
 const SYSTEM_PROMPT = `
@@ -34,8 +42,29 @@ function getSupabaseHeaders(token) {
   };
 }
 
-async function callGroq(messages, apiKey, temperature = 0.7) {
-  const response = await fetch(
+async function fetchT(url, options = {}, ms = 20000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw new Error(`Request timed out after ${Math.round(ms / 1000)}s.`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function callGroq(
+  messages,
+  apiKey,
+  temperature = 0.7,
+  model = MODELS.groq
+) {
+  const response = await fetchT(
     "https://api.groq.com/openai/v1/chat/completions",
     {
       method: "POST",
@@ -44,7 +73,7 @@ async function callGroq(messages, apiKey, temperature = 0.7) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: MODELS.groq,
+        model,
         messages,
         temperature,
         max_tokens: 4096,
@@ -98,7 +127,8 @@ async function callGemini(
   messages,
   apiKey,
   systemInstruction,
-  temperature = 0.7
+  temperature = 0.7,
+  model = MODELS.gemini
 ) {
   const contents = prepareGeminiContents(messages);
 
@@ -106,8 +136,8 @@ async function callGemini(
     throw new Error("No conversation content for Gemini.");
   }
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${MODELS.gemini}:generateContent`,
+  const response = await fetchT(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
     {
       method: "POST",
       headers: {
@@ -300,7 +330,7 @@ async function analyzeImage(prompt, image, apiKey) {
     throw new Error("Image is too large. Please use a smaller image.");
   }
 
-  const response = await fetch(
+  const response = await fetchT(
     "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
     {
       method: "POST",
@@ -350,6 +380,197 @@ async function analyzeImage(prompt, image, apiKey) {
   }
 
   return answer;
+}
+
+
+/* ---------------- SMART ROUTING ---------------- */
+
+function providerAvailable(key) {
+  const entry = MODEL_CATALOG[key];
+  if (!entry) return false;
+  return entry.provider === "groq"
+    ? Boolean(process.env.GROQ_API_KEY)
+    : Boolean(process.env.GEMINI_API_KEY);
+}
+
+function buildProviderChain(selected, mode, promptChars) {
+  const chain = [];
+
+  if (selected && selected !== "auto" && MODEL_CATALOG[selected]) {
+    chain.push(selected);
+  }
+
+  let auto;
+  if (promptChars > 20000 || mode === "research") {
+    auto = ["gemini", "groq", "groq-large"];      // long context / research
+  } else if (mode === "coding") {
+    auto = ["groq-large", "gemini", "groq"];      // stronger model for code
+  } else {
+    auto = ["groq", "gemini", "groq-large"];      // fast default
+  }
+
+  for (const key of auto) {
+    if (!chain.includes(key)) chain.push(key);
+  }
+
+  return chain.filter(providerAvailable);
+}
+
+/* ---------------- DOCUMENT OCR ---------------- */
+
+async function ocrDocument(file, apiKey) {
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY is missing in Netlify environment variables.");
+  }
+
+  const allowed = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
+
+  if (!file || typeof file.data !== "string" || !allowed.includes(file.mimeType)) {
+    throw new Error("OCR supports PDF, JPG, PNG and WEBP files.");
+  }
+
+  if (file.data.length > 9000000) {
+    throw new Error("File is too large for OCR.");
+  }
+
+  const response = await fetchT(
+    `https://generativelanguage.googleapis.com/v1beta/models/${MODELS.gemini}:generateContent`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey
+      },
+      body: JSON.stringify({
+        contents: [{
+          role: "user",
+          parts: [
+            {
+              text:
+                "Extract all readable text from this document exactly as written. " +
+                "Keep paragraphs, lists and tables (as plain text or Markdown). " +
+                "Do not summarize, translate or add commentary. " +
+                "If there is no readable text, reply with exactly: NO_TEXT_FOUND"
+            },
+            { inlineData: { mimeType: file.mimeType, data: file.data } }
+          ]
+        }],
+        generationConfig: { temperature: 0, maxOutputTokens: 8192 }
+      })
+    },
+    25000
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error?.message || `OCR failed (${response.status}).`);
+  }
+
+  const text = data.candidates?.[0]?.content?.parts
+    ?.filter(part => part.text)
+    .map(part => part.text)
+    .join("")
+    .trim() || "";
+
+  if (!text || text === "NO_TEXT_FOUND") {
+    throw new Error("No readable text was found in this document.");
+  }
+
+  return text;
+}
+
+/* ---------------- USAGE TRACKING ---------------- */
+
+async function logUsage(userId, token, row) {
+  try {
+    const response = await fetch(
+      `${process.env.SUPABASE_URL}/rest/v1/qubix_usage`,
+      {
+        method: "POST",
+        headers: {
+          ...getSupabaseHeaders(token),
+          Prefer: "return=minimal"
+        },
+        body: JSON.stringify({ user_id: userId, ...row })
+      }
+    );
+
+    if (!response.ok) {
+      console.error("Usage log failed:", await response.text());
+    }
+  } catch (error) {
+    console.error("Usage log error:", error.message);
+  }
+}
+
+async function usageSummary(userId, token, days = 30) {
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+
+  const url = new URL(`${process.env.SUPABASE_URL}/rest/v1/qubix_usage`);
+  url.searchParams.set(
+    "select",
+    "action,provider,model,status,error,latency_ms,web_search,fallback,created_at"
+  );
+  url.searchParams.set("user_id", `eq.${userId}`);
+  url.searchParams.set("created_at", `gte.${since}`);
+  url.searchParams.set("order", "created_at.desc");
+  url.searchParams.set("limit", "5000");
+
+  const response = await fetch(url, { headers: getSupabaseHeaders(token) });
+
+  if (!response.ok) {
+    throw new Error(
+      "Could not load usage. Run the qubix-phase1.sql migration in Supabase."
+    );
+  }
+
+  const rows = await response.json();
+
+  const count = (key) => rows.reduce((acc, row) => {
+    if (!row[key]) return acc;
+    acc[row[key]] = (acc[row[key]] || 0) + 1;
+    return acc;
+  }, {});
+
+  const today = new Date().toISOString().slice(0, 10);
+  const daily = [];
+
+  for (let i = 6; i >= 0; i--) {
+    const date = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+    daily.push({
+      date,
+      count: rows.filter(row => row.created_at.slice(0, 10) === date).length
+    });
+  }
+
+  const okRows = rows.filter(row => row.status === "ok");
+  const timed = okRows.filter(row => Number.isFinite(row.latency_ms));
+
+  return {
+    days,
+    total: rows.length,
+    ok: okRows.length,
+    errors: rows.length - okRows.length,
+    today: rows.filter(row => row.created_at.slice(0, 10) === today).length,
+    avgLatencyMs: timed.length
+      ? Math.round(timed.reduce((sum, row) => sum + row.latency_ms, 0) / timed.length)
+      : 0,
+    webSearches: rows.filter(row => row.web_search).length,
+    fallbacks: rows.filter(row => row.fallback).length,
+    byProvider: count("provider"),
+    byModel: count("model"),
+    byAction: count("action"),
+    daily,
+    recentErrors: rows
+      .filter(row => row.status === "error")
+      .slice(0, 5)
+      .map(row => ({
+        at: row.created_at,
+        action: row.action,
+        error: row.error || "Unknown error"
+      }))
+  };
 }
 
 /* ---------------- AUTHENTICATION ---------------- */
@@ -561,11 +782,17 @@ export default async function handler(request) {
     return json(405, { error: "Method not allowed." });
   }
 
+  let token = "";
+  let user = null;
+  let currentAction = "chat";
+  const startedAt = Date.now();
+  const LOGGED_ACTIONS = ["chat", "analyze_image", "generate_image", "ocr_document"];
+
   try {
-    const token = (request.headers.get("authorization") || "")
+    token = (request.headers.get("authorization") || "")
       .replace(/^Bearer\s+/i, "");
 
-    const user = await authenticate(token);
+    user = await authenticate(token);
     const body = await request.json();
 
     const {
@@ -574,8 +801,19 @@ export default async function handler(request) {
       action = "chat",
       webSearchEnabled = false,
       mode = "normal",
-      temperature = 0.7
+      temperature = 0.7,
+      model: selectedModel = "auto"
     } = body;
+
+    currentAction = action;
+
+    /* Usage summary */
+
+    if (action === "usage_summary") {
+      return json(200, {
+        usage: await usageSummary(user.id, token)
+      });
+    }
 
     /* Memory actions */
 
@@ -626,12 +864,39 @@ export default async function handler(request) {
         process.env.GEMINI_API_KEY
       );
 
+      await logUsage(user.id, token, {
+        action: "analyze_image",
+        provider: "gemini",
+        model: MODELS.gemini,
+        status: "ok",
+        latency_ms: Date.now() - startedAt,
+        input_chars: String(message || "").length,
+        output_chars: answer.length
+      });
+
       return json(200, {
         success: true,
         answer,
         provider: "gemini",
         action: "analyze_image"
       });
+    }
+
+    /* Document OCR (scanned PDFs and images) */
+
+    if (action === "ocr_document") {
+      const text = await ocrDocument(body.file, process.env.GEMINI_API_KEY);
+
+      await logUsage(user.id, token, {
+        action: "ocr_document",
+        provider: "gemini",
+        model: MODELS.gemini,
+        status: "ok",
+        latency_ms: Date.now() - startedAt,
+        output_chars: text.length
+      });
+
+      return json(200, { success: true, text });
     }
 
     /* Image generation */
@@ -649,6 +914,15 @@ export default async function handler(request) {
       }
 
       const image = await generateImage(body.prompt.trim());
+
+      await logUsage(user.id, token, {
+        action: "generate_image",
+        provider: "gemini",
+        model: image.model,
+        status: "ok",
+        latency_ms: Date.now() - startedAt,
+        input_chars: body.prompt.length
+      });
 
       return json(200, {
         success: true,
@@ -762,51 +1036,83 @@ Do not pretend that a web search succeeded.
       Math.max(0, Number(temperature) || 0.7)
     );
 
+    const promptChars = fullMessages.reduce(
+      (total, item) => total + String(item.content || "").length,
+      0
+    );
+
+    const chain = buildProviderChain(selectedModel, mode, promptChars);
+
+    if (!chain.length) {
+      throw new Error(
+        "No AI provider is configured. Add GROQ_API_KEY or GEMINI_API_KEY."
+      );
+    }
+
     let answer = "";
-    let provider = "groq";
-    let groqErrorMessage = "";
+    let provider = "";
+    let usedModel = "";
+    let usedKey = "";
+    const attempts = [];
 
-    /* Groq primary, Gemini fallback */
+    /* Try each model in order; move on if one fails or times out */
 
-    try {
-      if (!process.env.GROQ_API_KEY) {
-        throw new Error("GROQ_API_KEY is missing.");
+    for (const key of chain) {
+      const entry = MODEL_CATALOG[key];
+
+      try {
+        const result = entry.provider === "groq"
+          ? await callGroq(
+              fullMessages,
+              process.env.GROQ_API_KEY,
+              safeTemperature,
+              entry.model
+            )
+          : await callGemini(
+              fullMessages,
+              process.env.GEMINI_API_KEY,
+              systemInstruction,
+              safeTemperature,
+              entry.model
+            );
+
+        if (!result.trim()) throw new Error("Empty response.");
+
+        answer = result;
+        provider = entry.provider;
+        usedModel = entry.model;
+        usedKey = key;
+        break;
+      } catch (error) {
+        attempts.push(`${key}: ${error.message}`);
+        console.error(`Model ${key} failed:`, error.message);
       }
-
-      answer = await callGroq(
-        fullMessages,
-        process.env.GROQ_API_KEY,
-        safeTemperature
-      );
-    } catch (error) {
-      groqErrorMessage = error.message;
-      console.error("Groq error:", groqErrorMessage);
-
-      if (!process.env.GEMINI_API_KEY) {
-        throw new Error(
-          "Groq failed and Gemini API key is missing: " +
-          groqErrorMessage
-        );
-      }
-
-      provider = "gemini";
-
-      answer = await callGemini(
-        fullMessages,
-        process.env.GEMINI_API_KEY,
-        systemInstruction,
-        safeTemperature
-      );
     }
 
-    if (!answer.trim()) {
-      throw new Error("The AI returned an empty response.");
+    if (!usedKey) {
+      throw new Error("All AI providers failed. " + attempts.join(" | "));
     }
+
+    const fallbackUsed = usedKey !== chain[0];
+
+    await logUsage(user.id, token, {
+      action: "chat",
+      provider,
+      model: usedModel,
+      status: "ok",
+      latency_ms: Date.now() - startedAt,
+      input_chars: message.length,
+      output_chars: answer.length,
+      web_search: webSearchUsed,
+      fallback: fallbackUsed
+    });
 
     return json(200, {
       success: true,
       answer,
       provider,
+      model: usedModel,
+      fallbackUsed,
       memoryUsed,
       webSearchUsed,
       profileUsed: Boolean(profileContext)
@@ -816,6 +1122,15 @@ Do not pretend that a web search succeeded.
     console.error("QuBix error:", error);
 
     const message = error.message || "Something went wrong.";
+
+    if (user && token && LOGGED_ACTIONS.includes(currentAction)) {
+      await logUsage(user.id, token, {
+        action: currentAction,
+        status: "error",
+        error: String(message).slice(0, 300),
+        latency_ms: Date.now() - startedAt
+      });
+    }
 
     const statusCode =
       message.includes("Authentication") ||
