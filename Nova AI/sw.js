@@ -1,4 +1,4 @@
-const CACHE_NAME = "qubix-cache-v6";
+const CACHE_NAME = "qubix-cache-v7";
 
 const APP_FILES = [
   "/",
