@@ -807,6 +807,119 @@ async function summarizeChat(messages, selected) {
   return { summary, followUps, provider: result.provider, model: result.model };
 }
 
+
+/* ---------------- AI TOOLS HUB ---------------- */
+
+const pick = (value, allowed, fallback) =>
+  allowed.includes(value) ? value : fallback;
+
+const cleanLabel = (value, fallback = "", max = 40) =>
+  String(value || "")
+    .replace(/[^\p{L}\p{N}\s().+#-]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max) || fallback;
+
+function buildToolConfig(tool, o) {
+  if (!o || typeof o !== "object") o = {};
+
+  switch (tool) {
+    case "summarizer": {
+      const length = pick(o.length, ["short", "medium", "detailed"], "medium");
+      const format = pick(o.format, ["bullets", "paragraph"], "bullets");
+
+      return {
+        temperature: 0.3,
+        mode: "normal",
+        system:
+          "You are a summarizer. Summarize the user's text in the same language and script it is written in. " +
+          `Length: ${length}. Format: ${format}. Keep names, numbers and key facts accurate. ` +
+          "Do not add information that is not in the text. Output only the summary."
+      };
+    }
+
+    case "translator": {
+      const target = cleanLabel(o.target, "English");
+
+      return {
+        temperature: 0.2,
+        mode: "normal",
+        system:
+          `You are a professional translator. Translate the user's text into ${target}. ` +
+          "Detect the source language automatically. Preserve meaning, tone, formatting, names and numbers. " +
+          "If the target is Roman Urdu, write Urdu using Latin letters. Output only the translation."
+      };
+    }
+
+    case "writer": {
+      const type = pick(o.type, [
+        "blog post", "article", "social media post", "short story",
+        "essay", "product description", "speech", "script"
+      ], "article");
+      const tone = pick(o.tone, [
+        "professional", "casual", "friendly", "persuasive", "formal", "humorous"
+      ], "professional");
+      const length = pick(o.length, ["short", "medium", "long"], "medium");
+      const words = { short: "about 150 words", medium: "about 400 words", long: "about 800 words" }[length];
+
+      return {
+        temperature: 0.8,
+        mode: "creative",
+        system:
+          `You are a skilled writer. Write a ${type} based on the user's brief. ` +
+          `Tone: ${tone}. Length: ${words}. Write in the language of the brief unless asked otherwise. ` +
+          "Use headings only where natural. Output only the finished piece."
+      };
+    }
+
+    case "code": {
+      const guidance = {
+        explain: "Explain what the code does step by step in plain language.",
+        debug: "Find the bug(s), explain the cause, and give the corrected code.",
+        optimize: "Improve performance and readability. Show the improved code and list what changed.",
+        write: "Write clean, working code for the request, with brief usage notes.",
+        review: "Review the code for bugs, security issues and style. List findings by severity, with fixes.",
+        convert: "Convert the code to the language or framework named by the user, preserving behaviour.",
+        comment: "Add clear comments and docstrings without changing behaviour."
+      };
+      const task = pick(o.task, Object.keys(guidance), "explain");
+      const language = cleanLabel(o.language, "");
+
+      return {
+        temperature: 0.2,
+        mode: "coding",
+        system:
+          `You are an expert software engineer. Task: ${task}. ${guidance[task]} ` +
+          (language ? `Language or framework: ${language}. ` : "") +
+          "Use fenced Markdown code blocks with language tags. Be concise and explain only what matters. " +
+          "If the request is ambiguous, state your assumption in one line."
+      };
+    }
+
+    case "email": {
+      const type = pick(o.type, [
+        "new email", "reply", "follow-up", "apology", "request", "thank-you"
+      ], "new email");
+      const tone = pick(o.tone, [
+        "professional", "friendly", "formal", "polite", "firm"
+      ], "professional");
+
+      return {
+        temperature: 0.5,
+        mode: "normal",
+        system:
+          `You write emails. Write a ${tone} ${type} based on the user's notes. ` +
+          "If the user pasted an email to answer, write the reply to it. " +
+          "Start with a line 'Subject: ...', then a blank line, then the email body. " +
+          "Use the same language the user writes in. Keep it clear and concise. No extra commentary."
+      };
+    }
+
+    default:
+      return null;
+  }
+}
+
 /* ---------------- AUTHENTICATION ---------------- */
 
 async function authenticate(token) {
@@ -1020,7 +1133,7 @@ export default async function handler(request) {
   let user = null;
   let currentAction = "chat";
   const startedAt = Date.now();
-  const LOGGED_ACTIONS = ["chat", "analyze_image", "generate_image", "ocr_document", "chat_summary"];
+  const LOGGED_ACTIONS = ["chat", "analyze_image", "generate_image", "ocr_document", "chat_summary", "tool_run"];
 
   try {
     token = (request.headers.get("authorization") || "")
@@ -1037,7 +1150,9 @@ export default async function handler(request) {
       mode = "normal",
       temperature = 0.7,
       model: selectedModel = "auto",
-      chatSummary = ""
+      chatSummary = "",
+      projectName = "",
+      projectInstructions = ""
     } = body;
 
     currentAction = action;
@@ -1051,6 +1166,47 @@ export default async function handler(request) {
     }
 
     /* Memory actions */
+
+    /* AI Tools Hub */
+
+    if (action === "tool_run") {
+      const config = buildToolConfig(body.tool, body.options);
+
+      if (!config) return json(400, { error: "Unknown tool." });
+
+      const input = typeof body.input === "string" ? body.input.trim() : "";
+
+      if (!input) return json(400, { error: "Input is required." });
+
+      if (input.length > 12000) {
+        return json(413, { error: "Input is too long (max 12,000 characters)." });
+      }
+
+      const result = await generateWithChain({
+        system: config.system,
+        messages: [{ role: "user", content: input }],
+        selected: selectedModel,
+        mode: config.mode,
+        temperature: config.temperature
+      });
+
+      await logUsage(user.id, token, {
+        action: `tool:${body.tool}`,
+        provider: result.provider,
+        model: result.model,
+        status: "ok",
+        latency_ms: Date.now() - startedAt,
+        input_chars: input.length,
+        output_chars: result.answer.length
+      });
+
+      return json(200, {
+        success: true,
+        text: result.answer,
+        provider: result.provider,
+        model: result.model
+      });
+    }
 
     /* Memory 2.0: automatic extraction (called in the background by the app) */
 
@@ -1305,6 +1461,13 @@ Do not pretend that a web search succeeded.
         chatSummary.trim().slice(0, 4000)
       : "";
 
+    const projectContext =
+      typeof projectInstructions === "string" && projectInstructions.trim()
+        ? `\nProject instructions${projectName ? ` for "${String(projectName).slice(0, 60)}"` : ""} ` +
+          "(set by the user for this workspace; follow them while staying safe and honest):\n" +
+          projectInstructions.trim().slice(0, 2000)
+        : "";
+
     const profileContext = getProfilePrompt(profile);
     const modeContext = getModePrompt(mode);
 
@@ -1312,6 +1475,7 @@ Do not pretend that a web search succeeded.
       SYSTEM_PROMPT,
       modeContext,
       profileContext,
+      projectContext,
       memoryContext,
       summaryContext,
       searchContext
