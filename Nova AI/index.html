@@ -111,6 +111,17 @@ select,.select{background:var(--panel);border:1px solid var(--line);border-radiu
 .auth-card button{width:100%;margin-top:9px}
 .file-chip{font-size:11px;color:#b9adff;padding:5px 8px}
 .typing{color:var(--muted);font-size:13px}
+#modelSelect{max-width:150px}
+.usage-stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:12px 0}
+.usage-stat{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px}
+.usage-stat b{display:block;font-size:22px}
+.usage-stat span{font-size:12px;color:var(--muted)}
+.usage-h{font-size:13px;color:var(--muted);margin:18px 0 6px}
+.usage-row{display:grid;grid-template-columns:120px 1fr 36px;gap:8px;align-items:center;font-size:12px;margin:6px 0}
+.usage-row .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.usage-bar{height:8px;background:var(--panel2);border-radius:6px;overflow:hidden}
+.usage-bar i{display:block;height:100%;background:var(--accent)}
+.usage-err{font-size:12px;color:var(--muted);border-left:2px solid var(--danger);padding-left:9px;margin:7px 0;overflow-wrap:anywhere}
 body.light{--bg:#f5f6fb;--panel:#fff;--panel2:#eceef6;--text:#202234;--muted:#73798c;--line:#dfe2ec;--shadow:0 15px 45px #18204415}
 body.light .sidebar{background:#fff}
 body.light .composer-wrap{background:linear-gradient(transparent,var(--bg) 18%)}
@@ -136,6 +147,7 @@ body.light .message-content pre{background:#f0f1f6;color:#202234}
     <input class="search-box" id="chatSearch" placeholder="Search chats...">
     <div class="chat-list" id="chatList"></div>
     <div class="side-bottom">
+      <button class="side-btn" id="usageBtn">▦ &nbsp; Usage</button>
       <button class="side-btn" id="memoryBtn">✦ &nbsp; Memories</button>
       <button class="side-btn" id="settingsBtn">⚙ &nbsp; Settings</button>
       <button class="side-btn" id="accountBtn">◉ &nbsp; Account / Sign in</button>
@@ -149,6 +161,12 @@ body.light .message-content pre{background:#f0f1f6;color:#202234}
         <strong id="topTitle">New chat</strong>
       </div>
       <div class="top-right">
+        <select id="modelSelect" aria-label="AI model" title="AI model">
+          <option value="auto">⚡ Auto</option>
+          <option value="groq">Groq 20B · fast</option>
+          <option value="groq-large">Groq 120B · smarter</option>
+          <option value="gemini">Gemini 2.5 Flash</option>
+        </select>
         <select id="modeSelect" aria-label="Assistant mode">
           <option value="normal">✨ Normal</option>
           <option value="study">📚 Study</option>
@@ -269,6 +287,7 @@ let chats = [];
 let currentMessages = [];
 let attachedFile = null;
 let attachedText = "";
+let attachedImage = null;
 let isSending = false;
 let activeRequestController = null;
 let authMode = "signin";
@@ -565,7 +584,7 @@ async function sendMessage(forcedMessage=null) {
 
   const input=$("messageInput");
   const message=String(forcedMessage??input.value).trim();
-  if(!message&&!attachedText) return;
+  if(!message&&!attachedText&&!attachedImage) return;
 
   if(!currentUser) {
     toast("Sign in to use QuBix AI.");
@@ -576,9 +595,13 @@ async function sendMessage(forcedMessage=null) {
   if(!currentChatId) await createChat();
   if(!currentChatId) return;
 
-  const actualMessage=attachedText
+  const pendingImage=attachedImage;
+  const baseMessage=attachedText
     ?message+"\n\nAttached file ("+(attachedFile?.name||"file")+ "):\n"+attachedText
     :message;
+  const actualMessage=pendingImage
+    ?"🖼 [Image: "+pendingImage.name+"]\n"+baseMessage
+    :baseMessage;
 
   input.value="";
   input.style.height="auto";
@@ -600,15 +623,24 @@ async function sendMessage(forcedMessage=null) {
 
     const history=currentMessages.slice(0,-1).slice(-20);
     activeRequestController=new AbortController();
-    const data=await apiRequest({
-      message:actualMessage,
-      messages:history,
-      action:"chat",
-      mode:$("modeSelect").value,
-      webSearchEnabled:$("webToggle").checked
-    },activeRequestController.signal);
+    const payload=pendingImage
+      ?{
+        action:"analyze_image",
+        message:message||"Describe this image in detail.",
+        image:{mimeType:pendingImage.mimeType,data:pendingImage.data}
+      }
+      :{
+        message:actualMessage,
+        messages:history,
+        action:"chat",
+        mode:$("modeSelect").value,
+        model:$("modelSelect").value,
+        webSearchEnabled:$("webToggle").checked
+      };
+    const data=await apiRequest(payload,activeRequestController.signal);
 
     const answer=data.answer||"I couldn't generate an answer.";
+    if(data.fallbackUsed) toast("Primary model was unavailable. Answered by "+data.model+".");
     currentMessages.push({role:"assistant",content:answer});
     await saveMessage("assistant",answer);
 
@@ -652,10 +684,12 @@ async function regenerateAnswer(index) {
       messages:currentMessages.slice(0,-1).slice(-20),
       action:"chat",
       mode:$("modeSelect").value,
+      model:$("modelSelect").value,
       webSearchEnabled:$("webToggle").checked
     });
 
     const answer=data.answer||"No answer returned.";
+    if(data.fallbackUsed) toast("Primary model was unavailable. Answered by "+data.model+".");
     currentMessages.push({role:"assistant",content:answer});
     await saveMessage("assistant",answer);
     renderMessages();
@@ -947,6 +981,7 @@ async function addMemoryPrompt() {
 function clearAttachment() {
   attachedFile=null;
   attachedText="";
+  attachedImage=null;
   $("fileChip").hidden=true;
   $("fileChip").textContent="";
   $("fileInput").value="";
@@ -960,6 +995,7 @@ async function handleFile(file) {
     return;
   }
   const ext=file.name.split(".").pop().toLowerCase();
+  attachedImage=null;
   try {
     toast("Reading file...");
     let extracted="";
@@ -976,13 +1012,28 @@ async function handleFile(file) {
         pages.push(content.items.map(item=>item.str).join(" "));
       }
       extracted=pages.join("\n\n");
-      if(!extracted.trim()) throw new Error("This PDF appears scanned or contains no selectable text. OCR is not enabled yet.");
+      if(!extracted.trim()) {
+        if(file.size>6*1024*1024) throw new Error("Scanned PDF is too large for OCR (max 6 MB).");
+        if(!currentUser) throw new Error("Sign in to read scanned PDFs.");
+        toast("Scanned PDF detected. Running OCR...");
+        const ocr=await apiRequest({
+          action:"ocr_document",
+          file:{mimeType:"application/pdf",data:await fileToBase64(file)}
+        });
+        extracted=ocr.text||"";
+      }
     } else if(ext==="docx") {
       if(!window.mammoth) throw new Error("DOCX reader library did not load. Refresh and try again.");
       const result=await mammoth.extractRawText({arrayBuffer:await file.arrayBuffer()});
       extracted=result.value||"";
     } else if(["png","jpg","jpeg","webp"].includes(ext)) {
-      throw new Error("Image attachments are not yet connected to image understanding. Attach a text, PDF or DOCX file instead.");
+      attachedImage=await prepareImage(file);
+      attachedText="";
+      attachedFile=file;
+      $("fileChip").hidden=false;
+      $("fileChip").textContent="Image attached: "+file.name+" · "+Math.round(file.size/1024)+" KB";
+      toast("Image ready. Ask a question about it.");
+      return;
     } else {
       throw new Error("Supported: TXT, MD, CSV, JSON, HTML, CSS, JS, PY, LOG, XML, PDF and DOCX.");
     }
@@ -1227,6 +1278,108 @@ $("guestBtn").onclick=()=>setAuthScreen(false);
 document.querySelectorAll(".suggestion").forEach(button=>{
   button.onclick=()=>sendMessage(button.dataset.prompt);
 });
+
+function fileToBase64(file) {
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>resolve(String(reader.result).split(",")[1]||"");
+    reader.onerror=()=>reject(new Error("Could not read this file."));
+    reader.readAsDataURL(file);
+  });
+}
+
+/* Resize to max 1600px and convert to JPEG so uploads stay small and fast */
+function prepareImage(file) {
+  return new Promise((resolve,reject)=>{
+    const url=URL.createObjectURL(file);
+    const img=new Image();
+    img.onload=()=>{
+      const scale=Math.min(1,1600/Math.max(img.width,img.height));
+      const w=Math.max(1,Math.round(img.width*scale));
+      const h=Math.max(1,Math.round(img.height*scale));
+      const canvas=document.createElement("canvas");
+      canvas.width=w; canvas.height=h;
+      const ctx=canvas.getContext("2d");
+      ctx.fillStyle="#fff";
+      ctx.fillRect(0,0,w,h);
+      ctx.drawImage(img,0,0,w,h);
+      URL.revokeObjectURL(url);
+      resolve({
+        name:file.name,
+        mimeType:"image/jpeg",
+        data:canvas.toDataURL("image/jpeg",0.85).split(",")[1]
+      });
+    };
+    img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error("Could not read this image."));};
+    img.src=url;
+  });
+}
+
+/* ---------- Usage dashboard ---------- */
+
+function usageBars(obj) {
+  const entries=Object.entries(obj||{}).sort((a,b)=>b[1]-a[1]);
+  if(!entries.length) return '<div class="usage-err" style="border-color:var(--line)">No data yet.</div>';
+  const max=Math.max(...entries.map(e=>e[1]));
+  return entries.map(([name,count])=>`
+    <div class="usage-row">
+      <span class="name" title="${escapeHTML(name)}">${escapeHTML(name)}</span>
+      <div class="usage-bar"><i style="width:${Math.max(4,Math.round(count/max*100))}%"></i></div>
+      <span>${count}</span>
+    </div>`).join("");
+}
+
+function renderUsage(u) {
+  const rate=u.total?Math.round(u.ok/u.total*100):0;
+  const dailyMax=Math.max(1,...(u.daily||[]).map(d=>d.count));
+  const dailyRows=(u.daily||[]).map(d=>`
+    <div class="usage-row">
+      <span class="name">${escapeHTML(d.date.slice(5))}</span>
+      <div class="usage-bar"><i style="width:${d.count?Math.max(4,Math.round(d.count/dailyMax*100)):0}%"></i></div>
+      <span>${d.count}</span>
+    </div>`).join("");
+  const errors=(u.recentErrors||[]).map(e=>`
+    <div class="usage-err"><b>${escapeHTML(e.action)}</b> · ${escapeHTML(new Date(e.at).toLocaleString())}<br>${escapeHTML(e.error)}</div>`).join("");
+
+  return `
+    <div class="usage-stats">
+      <div class="usage-stat"><b>${u.total}</b><span>Requests, last ${u.days} days</span></div>
+      <div class="usage-stat"><b>${u.today}</b><span>Today</span></div>
+      <div class="usage-stat"><b>${rate}%</b><span>Success rate</span></div>
+      <div class="usage-stat"><b>${u.avgLatencyMs?(u.avgLatencyMs/1000).toFixed(1)+"s":"–"}</b><span>Average response time</span></div>
+    </div>
+    <div class="usage-h">Last 7 days</div>${dailyRows}
+    <div class="usage-h">By provider</div>${usageBars(u.byProvider)}
+    <div class="usage-h">By model</div>${usageBars(u.byModel)}
+    <div class="usage-h">By feature</div>${usageBars(u.byAction)}
+    <div class="usage-h">Web searches: ${u.webSearches} · Fallbacks to another model: ${u.fallbacks}</div>
+    ${errors?'<div class="usage-h">Recent errors</div>'+errors:""}`;
+}
+
+async function openUsage() {
+  if(!currentUser) {
+    toast("Sign in to see your usage.");
+    setAuthScreen(true);
+    return;
+  }
+  showModal(`<h2>Usage</h2><div id="usageBody" style="color:var(--muted)">Loading...</div>
+    <div class="modal-actions"><button class="secondary" id="closeUsage">Close</button></div>`);
+  $("closeUsage").onclick=closeModal;
+  try {
+    const {usage}=await apiRequest({action:"usage_summary"});
+    $("usageBody").style.color="";
+    $("usageBody").innerHTML=renderUsage(usage);
+  } catch(error) {
+    $("usageBody").textContent=error.message;
+  }
+}
+
+$("usageBtn").onclick=openUsage;
+
+/* Remember the chosen AI model */
+$("modelSelect").value=localStorage.getItem("qubix_model")||"auto";
+if(!$("modelSelect").value) $("modelSelect").value="auto";
+$("modelSelect").onchange=()=>localStorage.setItem("qubix_model",$("modelSelect").value);
 
 async function init() {
   setTheme(localStorage.getItem("qubix_theme")||"dark");
