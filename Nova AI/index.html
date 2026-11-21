@@ -115,6 +115,25 @@ select,.select{background:var(--panel);border:1px solid var(--line);border-radiu
 .mem-form{display:flex;gap:6px;margin:12px 0;flex-wrap:wrap}
 .mem-form input,.mem-form select{background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:9px;font:inherit;font-size:13px}
 .mem-form input{flex:1;min-width:150px}
+.mem-form input,.mem-form select{margin:0;width:auto}
+.mem-form input{width:auto}
+.mem-auto input{width:auto;margin:0;padding:0}
+.proj-row{display:flex;gap:6px;align-items:center;margin-top:10px}
+.proj-row select{flex:1;min-width:0;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:9px;font:inherit;font-size:13px}
+.quick-row{display:flex;gap:6px;margin-top:8px}
+.quick-row .side-btn{flex:1;text-align:center;border:1px solid var(--line);padding:8px;font-size:13px}
+.item-row{padding:11px 0;border-bottom:1px solid var(--line)}
+.item-title{font-weight:600;font-size:14px}
+.item-prev{font-size:12px;color:var(--muted);margin:3px 0 8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.item-actions{display:flex;gap:6px;flex-wrap:wrap}
+.item-actions .secondary{padding:6px 11px;font-size:12px}
+.tool-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.tool-tab{background:var(--panel2);color:var(--muted);border:1px solid var(--line);border-radius:20px;padding:6px 12px;font-size:12px}
+.tool-tab.active{border-color:var(--accent);color:var(--text)}
+.tool-opts{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
+.tool-opts label{font-size:12px;color:var(--muted)}
+.tool-opts select,.tool-opts input{margin:4px 0 10px}
+.tool-out{margin-top:14px;padding:12px;background:var(--bg);border:1px solid var(--line);border-radius:12px;font-size:14px;line-height:1.65;max-height:38vh;overflow:auto;overflow-wrap:anywhere}
 .mem-cat{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:20px;padding:2px 8px;white-space:nowrap}
 .mem-auto{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--muted);margin:8px 0}
 .sum-body{font-size:14px;line-height:1.65;max-height:48vh;overflow:auto}
@@ -153,6 +172,14 @@ body.light .message-content pre{background:#f0f1f6;color:#202234}
   <aside class="sidebar" id="sidebar">
     <div class="brand"><img class="brand-logo" src="/icon.svg" alt="QuBix logo">QuBix AI</div>
     <button class="new-chat" id="newChatBtn">＋ &nbsp; New chat</button>
+    <div class="proj-row">
+      <select id="projectSelect" aria-label="Project"></select>
+      <button class="icon-btn" id="projectManageBtn" title="Manage projects">✎</button>
+    </div>
+    <div class="quick-row">
+      <button class="side-btn" id="toolsBtn">⚒ Tools</button>
+      <button class="side-btn" id="promptsBtn">❝ Prompts</button>
+    </div>
     <div class="side-label">Your conversations</div>
     <input class="search-box" id="chatSearch" placeholder="Search chats...">
     <div class="chat-list" id="chatList"></div>
@@ -303,6 +330,9 @@ let isSending = false;
 let activeRequestController = null;
 let authMode = "signin";
 let memories = [];
+let projects = [];
+let projectsLoaded = false;
+let activeProjectId = localStorage.getItem("qubix_project") || "";
 let profile = {
   preferred_language: "auto",
   response_style: "balanced",
@@ -343,6 +373,7 @@ function showModal(html) {
 }
 
 function closeModal() {
+  $("modal").style.width = "";
   $("modalBackdrop").style.display = "none";
   $("modal").innerHTML = "";
 }
@@ -458,7 +489,10 @@ function renderMessages() {
 function renderChats() {
   const query=$("chatSearch").value.toLowerCase().trim();
   $("chatList").innerHTML="";
-  const filtered=chats.filter(c=>String(c.title||"New chat").toLowerCase().includes(query));
+  const filtered=chats.filter(c=>
+    String(c.title||"New chat").toLowerCase().includes(query)&&
+    (!activeProjectId||c.project_id===activeProjectId)
+  );
 
   filtered.forEach(chat=>{
     const item=document.createElement("div");
@@ -489,8 +523,16 @@ function renderChats() {
 async function loadChats() {
   if(!currentUser) {
     chats=[];
+    projects=[];
+    projectsLoaded=false;
+    renderProjectSelect();
     renderChats();
     return;
+  }
+
+  if(!projectsLoaded) {
+    projectsLoaded=true;
+    await loadProjects();
   }
 
   const {data,error}=await db.from("chats")
@@ -516,7 +558,7 @@ async function createChat() {
   }
 
   const {data,error}=await db.from("chats")
-    .insert({user_id:currentUser.id,title:"New chat"})
+    .insert({user_id:currentUser.id,title:"New chat",...(activeProjectId?{project_id:activeProjectId}:{})})
     .select()
     .single();
 
@@ -651,6 +693,7 @@ async function sendMessage(forcedMessage=null) {
         message:actualMessage,
         messages:history,
         chatSummary:getChatSummaryContext(),
+        ...getProjectContext(),
         action:"chat",
         mode:$("modeSelect").value,
         model:$("modelSelect").value,
@@ -703,6 +746,7 @@ async function regenerateAnswer(index) {
       message:userMessage,
       messages:currentMessages.slice(0,-1).slice(-20),
       chatSummary:getChatSummaryContext(),
+        ...getProjectContext(),
       action:"chat",
       mode:$("modeSelect").value,
       model:$("modelSelect").value,
@@ -734,6 +778,7 @@ async function copyText(text) {
     <p style="color:var(--muted)">${escapeHTML(chat.title||"Chat")}</p>
     <button class="secondary" style="width:100%;margin:5px 0" id="renameChat">✎ Rename chat</button>
     <button class="secondary" style="width:100%;margin:5px 0" id="pinChat">${chat.pinned?"☆ Unpin chat":"★ Pin chat"}</button>
+    <button class="secondary" style="width:100%;margin:5px 0" id="moveChat">📁 Move to project</button>
     <button class="secondary" style="width:100%;margin:5px 0" id="exportChat">⇩ Export Markdown</button>
     <button class="secondary" style="width:100%;margin:5px 0" id="shareThisChat">↗ Share chat</button>
     <button class="secondary danger" style="width:100%;margin:5px 0" id="deleteChat">⌫ Delete chat</button>
@@ -741,6 +786,7 @@ async function copyText(text) {
   `);
 
   $("closeChatOptions").onclick=closeModal;
+  $("moveChat").onclick=()=>moveChatToProject(chat);
 
   $("renameChat").onclick=async()=>{
     const title=prompt("Enter a new chat name:",chat.title||"");
@@ -1113,6 +1159,371 @@ async function openSummary() {
 }
 
 $("summaryBtn").onclick=openSummary;
+
+/* ============ Workspace (projects) ============ */
+
+async function loadProjects() {
+  if(!currentUser) { projects=[]; renderProjectSelect(); return; }
+  const {data,error}=await db.from("qubix_projects")
+    .select("*")
+    .eq("user_id",currentUser.id)
+    .order("created_at",{ascending:true});
+  if(error) { console.error(error); projects=[]; }
+  else projects=data||[];
+  if(activeProjectId&&!projects.some(p=>p.id===activeProjectId)) {
+    activeProjectId="";
+    localStorage.removeItem("qubix_project");
+  }
+  renderProjectSelect();
+}
+
+function renderProjectSelect() {
+  const select=$("projectSelect");
+  select.innerHTML="";
+  select.appendChild(new Option("All chats",""));
+  projects.forEach(p=>select.appendChild(new Option("📁 "+p.name,p.id)));
+  select.value=activeProjectId;
+}
+
+function getProjectContext() {
+  const chat=chats.find(c=>c.id===currentChatId);
+  const project=chat&&chat.project_id?projects.find(p=>p.id===chat.project_id):null;
+  return project?{projectName:project.name,projectInstructions:project.instructions||""}:{};
+}
+
+function openProjects() {
+  if(!currentUser) { toast("Sign in to use projects."); setAuthScreen(true); return; }
+
+  const rows=projects.map(p=>`
+    <div class="item-row">
+      <div class="item-title">📁 ${escapeHTML(p.name)}</div>
+      <div class="item-prev">${escapeHTML(p.instructions||"No instructions")}</div>
+      <div class="item-actions">
+        <button class="secondary" data-edit="${escapeHTML(p.id)}">Edit</button>
+        <button class="secondary danger" data-del="${escapeHTML(p.id)}">Delete</button>
+      </div>
+    </div>`).join("")||'<p style="color:var(--muted)">No projects yet.</p>';
+
+  showModal(`<h2>Projects</h2>
+    <p style="font-size:12px;color:var(--muted)">Group chats by project. Each project can have its own instructions that QuBix follows in every chat inside it.</p>
+    ${rows}
+    <div class="modal-actions" style="margin-top:14px">
+      <button class="secondary" id="projNew">＋ New project</button>
+      <button class="secondary" id="projClose">Close</button>
+    </div>`);
+
+  $("projClose").onclick=closeModal;
+  $("projNew").onclick=()=>editProject(null);
+  document.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>editProject(projects.find(p=>p.id===b.dataset.edit)));
+  document.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{
+    if(!confirm("Delete this project? Its chats are kept and just removed from the project.")) return;
+    const {error}=await db.from("qubix_projects").delete().eq("id",b.dataset.del).eq("user_id",currentUser.id);
+    if(error) return toast(error.message);
+    if(activeProjectId===b.dataset.del) { activeProjectId=""; localStorage.removeItem("qubix_project"); }
+    await loadChats();
+    openProjects();
+  });
+}
+
+function editProject(project) {
+  showModal(`<h2>${project?"Edit project":"New project"}</h2>
+    <label style="font-size:12px;color:var(--muted)">Name</label>
+    <input id="pjName" maxlength="60" placeholder="e.g. Thesis, Website redesign">
+    <label style="font-size:12px;color:var(--muted)">Instructions (optional)</label>
+    <textarea id="pjInstr" maxlength="2000" placeholder="e.g. Answer in formal English. I am writing a thesis on renewable energy."></textarea>
+    <div class="modal-actions">
+      <button class="secondary" id="pjCancel">Cancel</button>
+      <button class="secondary" id="pjSave">Save</button>
+    </div>`);
+  $("pjName").value=project?.name||"";
+  $("pjInstr").value=project?.instructions||"";
+  $("pjCancel").onclick=openProjects;
+  $("pjSave").onclick=async()=>{
+    const name=$("pjName").value.trim();
+    if(!name) return toast("Give the project a name.");
+    const row={name:name.slice(0,60),instructions:$("pjInstr").value.trim().slice(0,2000)};
+    const result=project
+      ?await db.from("qubix_projects").update(row).eq("id",project.id).eq("user_id",currentUser.id)
+      :await db.from("qubix_projects").insert({...row,user_id:currentUser.id});
+    if(result.error) return toast(result.error.message);
+    await loadProjects();
+    toast("Project saved.");
+    openProjects();
+  };
+}
+
+function moveChatToProject(chat) {
+  if(!projects.length) { toast("Create a project first (✎ above the chat list)."); return; }
+  showModal(`<h2>Move to project</h2>
+    <select id="moveSel"><option value="">No project</option>${projects.map(p=>`<option value="${escapeHTML(p.id)}">${escapeHTML(p.name)}</option>`).join("")}</select>
+    <div class="modal-actions">
+      <button class="secondary" id="moveCancel">Cancel</button>
+      <button class="secondary" id="moveSave">Move</button>
+    </div>`);
+  $("moveSel").value=chat.project_id||"";
+  $("moveCancel").onclick=closeModal;
+  $("moveSave").onclick=async()=>{
+    const {error}=await db.from("chats").update({project_id:$("moveSel").value||null})
+      .eq("id",chat.id).eq("user_id",currentUser.id);
+    if(error) return toast(error.message);
+    closeModal();
+    await loadChats();
+    toast("Chat moved.");
+  };
+}
+
+$("projectSelect").onchange=()=>{
+  activeProjectId=$("projectSelect").value;
+  if(activeProjectId) localStorage.setItem("qubix_project",activeProjectId);
+  else localStorage.removeItem("qubix_project");
+  renderChats();
+};
+$("projectManageBtn").onclick=openProjects;
+renderProjectSelect();
+
+/* ============ AI Tools Hub ============ */
+
+const LANGUAGES=["English","Urdu","Roman Urdu","Hindi","Arabic","Spanish","French","German","Chinese","Turkish","Russian","Japanese"];
+const opt=(list)=>list.map(v=>[v,v[0].toUpperCase()+v.slice(1)]);
+
+const TOOLS={
+  summarizer:{label:"Summarizer",placeholder:"Paste the text you want summarized...",opts:[
+    {key:"length",label:"Length",choices:opt(["short","medium","detailed"]),value:"medium"},
+    {key:"format",label:"Format",choices:opt(["bullets","paragraph"]),value:"bullets"}]},
+  translator:{label:"Translator",placeholder:"Type or paste the text to translate...",opts:[
+    {key:"target",label:"Translate to",choices:LANGUAGES.map(l=>[l,l]),value:"English"}]},
+  writer:{label:"Writer",placeholder:"Describe what to write: topic, audience, key points...",opts:[
+    {key:"type",label:"Type",choices:opt(["article","blog post","social media post","short story","essay","product description","speech","script"]),value:"article"},
+    {key:"tone",label:"Tone",choices:opt(["professional","casual","friendly","persuasive","formal","humorous"]),value:"professional"},
+    {key:"length",label:"Length",choices:opt(["short","medium","long"]),value:"medium"}]},
+  code:{label:"Code Helper",placeholder:"Paste your code, or describe what to build...",opts:[
+    {key:"task",label:"Task",choices:opt(["explain","debug","optimize","write","review","convert","comment"]),value:"explain"},
+    {key:"language",label:"Language / framework (optional)",type:"text",value:""}]},
+  email:{label:"Email Writer",placeholder:"What should the email say? Or paste the email you want to reply to...",opts:[
+    {key:"type",label:"Type",choices:opt(["new email","reply","follow-up","apology","request","thank-you"]),value:"new email"},
+    {key:"tone",label:"Tone",choices:opt(["professional","friendly","formal","polite","firm"]),value:"professional"}]}
+};
+
+let toolDraft="";
+let toolResult="";
+
+function openTools(name="summarizer") {
+  if(!currentUser) { toast("Sign in to use tools."); setAuthScreen(true); return; }
+  const tool=TOOLS[name];
+  $("modal").style.width="min(680px,100%)";
+
+  const tabs=Object.entries(TOOLS).map(([key,t])=>
+    `<button class="tool-tab${key===name?" active":""}" data-tool="${key}">${t.label}</button>`).join("");
+
+  const options=tool.opts.map(o=>o.type==="text"
+    ?`<div><label>${o.label}</label><input id="opt_${o.key}" maxlength="40"></div>`
+    :`<div><label>${o.label}</label><select id="opt_${o.key}">${o.choices.map(c=>`<option value="${escapeHTML(c[0])}">${escapeHTML(c[1])}</option>`).join("")}</select></div>`
+  ).join("");
+
+  showModal(`<h2>AI Tools</h2>
+    <div class="tool-tabs">${tabs}</div>
+    <div class="tool-opts">${options}</div>
+    <textarea id="toolInput" maxlength="12000" style="min-height:130px;margin-bottom:10px" placeholder="${escapeHTML(tool.placeholder)}"></textarea>
+    <div id="toolOut" class="tool-out" hidden></div>
+    <div class="modal-actions" style="margin-top:14px">
+      <button class="secondary" id="toolCopy" hidden>Copy</button>
+      <button class="secondary" id="toolUse" hidden>Use in chat</button>
+      <button class="secondary" id="toolClose">Close</button>
+      <button class="secondary" id="toolRun" style="border-color:var(--accent)">Run</button>
+    </div>`);
+
+  tool.opts.forEach(o=>{ $("opt_"+o.key).value=o.value; });
+  $("toolInput").value=toolDraft;
+  $("toolInput").oninput=()=>{ toolDraft=$("toolInput").value; };
+  document.querySelectorAll("[data-tool]").forEach(b=>b.onclick=()=>{ toolDraft=$("toolInput").value; openTools(b.dataset.tool); });
+  $("toolClose").onclick=closeModal;
+  $("toolRun").onclick=()=>runTool(name);
+  $("toolCopy").onclick=async()=>{
+    try { await navigator.clipboard.writeText(toolResult); toast("Copied."); }
+    catch { toast("Could not copy."); }
+  };
+  $("toolUse").onclick=()=>{
+    closeModal();
+    const input=$("messageInput");
+    input.value=toolResult;
+    input.style.height="auto";
+    input.style.height=Math.min(input.scrollHeight,200)+"px";
+    input.focus();
+  };
+}
+
+async function runTool(name) {
+  const input=$("toolInput").value.trim();
+  if(!input) return toast("Enter some text first.");
+  const options={};
+  TOOLS[name].opts.forEach(o=>{ options[o.key]=$("opt_"+o.key).value; });
+
+  const run=$("toolRun");
+  const out=$("toolOut");
+  run.disabled=true;
+  run.textContent="Working...";
+  try {
+    const result=await apiRequest({action:"tool_run",tool:name,input,options,model:$("modelSelect").value});
+    toolResult=result.text;
+    out.hidden=false;
+    out.innerHTML=safeMarkdown(result.text);
+    $("toolCopy").hidden=false;
+    $("toolUse").hidden=false;
+  } catch(error) {
+    out.hidden=false;
+    out.textContent=error.message;
+  } finally {
+    run.disabled=false;
+    run.textContent="Run";
+  }
+}
+
+$("toolsBtn").onclick=()=>openTools();
+
+/* ============ Prompt Library ============ */
+
+let prompts=[];
+const PROMPT_CATEGORIES=["general","writing","coding","study","work"];
+const STARTER_PROMPTS=[
+  {title:"Explain simply",category:"study",content:"Explain {topic} in simple words with a real-life example, as if I'm a beginner."},
+  {title:"Code review",category:"coding",content:"Review this code for bugs, security issues and readability, and suggest fixes:\n\n{code}"},
+  {title:"Polish my email",category:"work",content:"Rewrite this email to be clear, polite and professional, keeping my meaning:\n\n{email}"},
+  {title:"Study plan",category:"study",content:"Create a {days}-day study plan for {subject}. I can study {hours} hours per day."}
+];
+
+async function loadPrompts() {
+  const {data,error}=await db.from("qubix_prompts")
+    .select("*")
+    .eq("user_id",currentUser.id)
+    .order("created_at",{ascending:false});
+  if(error) throw new Error(error.message);
+  prompts=data||[];
+}
+
+async function openPrompts() {
+  if(!currentUser) { toast("Sign in to use the prompt library."); setAuthScreen(true); return; }
+  showModal(`<h2>Prompt library</h2>
+    <div class="mem-form">
+      <input id="prSearch" placeholder="Search prompts...">
+      <select id="prCat"><option value="">All</option>${PROMPT_CATEGORIES.map(c=>`<option value="${c}">${c[0].toUpperCase()+c.slice(1)}</option>`).join("")}</select>
+    </div>
+    <div id="prList" style="max-height:46vh;overflow:auto">Loading...</div>
+    <div class="modal-actions" style="margin-top:14px">
+      <button class="secondary" id="prNew">＋ New prompt</button>
+      <button class="secondary" id="prClose">Close</button>
+    </div>`);
+  $("prClose").onclick=closeModal;
+  $("prNew").onclick=()=>editPrompt(null);
+  $("prSearch").oninput=renderPromptList;
+  $("prCat").onchange=renderPromptList;
+  try {
+    await loadPrompts();
+    renderPromptList();
+  } catch(error) {
+    $("prList").textContent=error.message;
+  }
+}
+
+function renderPromptList() {
+  const list=$("prList");
+  if(!list) return;
+  const q=$("prSearch").value.toLowerCase().trim();
+  const cat=$("prCat").value;
+  const shown=prompts.filter(p=>
+    (!cat||p.category===cat)&&
+    (!q||(p.title+" "+p.content).toLowerCase().includes(q)));
+
+  list.innerHTML="";
+
+  if(!prompts.length) {
+    list.innerHTML='<p style="color:var(--muted)">No prompts saved yet.</p>';
+    const starter=document.createElement("button");
+    starter.className="secondary";
+    starter.textContent="Add starter prompts";
+    starter.onclick=async()=>{
+      const {error}=await db.from("qubix_prompts").insert(STARTER_PROMPTS.map(p=>({...p,user_id:currentUser.id})));
+      if(error) return toast(error.message);
+      await loadPrompts();
+      renderPromptList();
+    };
+    list.appendChild(starter);
+    return;
+  }
+
+  if(!shown.length) { list.innerHTML='<p style="color:var(--muted)">No matching prompts.</p>'; return; }
+
+  shown.forEach(p=>{
+    const row=document.createElement("div");
+    row.className="item-row";
+    row.innerHTML=`<div class="item-title">${escapeHTML(p.title)} <span class="mem-cat">${escapeHTML(p.category)}</span></div>
+      <div class="item-prev">${escapeHTML(p.content)}</div>
+      <div class="item-actions"></div>`;
+    const actions=row.querySelector(".item-actions");
+    [["Use",()=>usePrompt(p)],["Edit",()=>editPrompt(p)],["Delete",async()=>{
+      if(!confirm("Delete this prompt?")) return;
+      const {error}=await db.from("qubix_prompts").delete().eq("id",p.id).eq("user_id",currentUser.id);
+      if(error) return toast(error.message);
+      await loadPrompts();
+      renderPromptList();
+    }]].forEach(([label,fn])=>{
+      const b=document.createElement("button");
+      b.className="secondary"+(label==="Delete"?" danger":"");
+      b.textContent=label;
+      b.onclick=fn;
+      actions.appendChild(b);
+    });
+    list.appendChild(row);
+  });
+}
+
+/* Prompts can contain {placeholders}; ask for each one before inserting */
+function usePrompt(p) {
+  let text=p.content;
+  const names=[...new Set([...text.matchAll(/\{([^{}\n]{1,30})\}/g)].map(m=>m[1]))];
+  for(const name of names) {
+    const value=prompt("Fill in: "+name);
+    if(value===null) return;
+    text=text.split("{"+name+"}").join(value);
+  }
+  closeModal();
+  const input=$("messageInput");
+  input.value=text;
+  input.style.height="auto";
+  input.style.height=Math.min(input.scrollHeight,200)+"px";
+  input.focus();
+}
+
+function editPrompt(p) {
+  showModal(`<h2>${p?"Edit prompt":"New prompt"}</h2>
+    <label style="font-size:12px;color:var(--muted)">Title</label>
+    <input id="prTitle" maxlength="80">
+    <label style="font-size:12px;color:var(--muted)">Category</label>
+    <select id="prCategory">${PROMPT_CATEGORIES.map(c=>`<option value="${c}">${c[0].toUpperCase()+c.slice(1)}</option>`).join("")}</select>
+    <label style="font-size:12px;color:var(--muted)">Prompt (use {placeholders} for parts you fill in each time)</label>
+    <textarea id="prContent" maxlength="4000" style="min-height:140px"></textarea>
+    <div class="modal-actions">
+      <button class="secondary" id="prCancel">Cancel</button>
+      <button class="secondary" id="prSave">Save</button>
+    </div>`);
+  $("prTitle").value=p?.title||"";
+  $("prCategory").value=p?.category||"general";
+  $("prContent").value=p?.content||$("messageInput").value.trim();
+  $("prCancel").onclick=openPrompts;
+  $("prSave").onclick=async()=>{
+    const title=$("prTitle").value.trim();
+    const content=$("prContent").value.trim();
+    if(!title||!content) return toast("Add a title and the prompt text.");
+    const row={title:title.slice(0,80),content:content.slice(0,4000),category:$("prCategory").value};
+    const result=p
+      ?await db.from("qubix_prompts").update(row).eq("id",p.id).eq("user_id",currentUser.id)
+      :await db.from("qubix_prompts").insert({...row,user_id:currentUser.id});
+    if(result.error) return toast(result.error.message);
+    toast("Prompt saved.");
+    openPrompts();
+  };
+}
+
+$("promptsBtn").onclick=openPrompts;
 
 function clearAttachment() {
   attachedFile=null;
