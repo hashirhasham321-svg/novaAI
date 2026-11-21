@@ -173,19 +173,19 @@ async function callGemini(
 
 /* ---------------- WEB SEARCH ---------------- */
 
-async function webSearch(query) {
+async function webSearch(query, deep = false) {
   if (!process.env.TAVILY_API_KEY) {
     throw new Error("Web search is not configured. Add TAVILY_API_KEY.");
   }
 
-  const response = await fetch("https://api.tavily.com/search", {
+  const response = await fetchT("https://api.tavily.com/search", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       api_key: process.env.TAVILY_API_KEY,
-      query,
-      search_depth: "basic",
-      max_results: 5,
+      query: String(query).slice(0, 380),
+      search_depth: deep ? "advanced" : "basic",
+      max_results: deep ? 8 : 5,
       include_answer: true
     })
   });
@@ -573,6 +573,240 @@ async function usageSummary(userId, token, days = 30) {
   };
 }
 
+
+/* ---------------- SOURCES (WEB RESEARCH) ---------------- */
+
+const SOURCES_TAIL = /\n\n---\n\*\*Sources\*\*[\s\S]*$/;
+
+function stripSources(text) {
+  return String(text || "").replace(SOURCES_TAIL, "");
+}
+
+function buildSourcesMarkdown(sources) {
+  const lines = sources.map((source, index) => {
+    let host = "";
+
+    try {
+      host = new URL(source.url).hostname.replace(/^www\./, "");
+    } catch {}
+
+    const title = String(source.title || host || source.url)
+      .replace(/[\[\]\r\n]+/g, " ")
+      .trim()
+      .slice(0, 120);
+
+    return `${index + 1}. [${title}](${source.url})${host ? ` — ${host}` : ""}`;
+  });
+
+  return `\n\n---\n**Sources**\n\n${lines.join("\n")}`;
+}
+
+/* ---------------- GENERIC TEXT GENERATION (with fallback) ---------------- */
+
+async function generateWithChain({
+  system,
+  messages,
+  selected = "auto",
+  mode = "normal",
+  temperature = 0.4
+}) {
+  const fullMessages = [{ role: "system", content: system }, ...messages];
+
+  const promptChars = fullMessages.reduce(
+    (total, item) => total + String(item.content || "").length,
+    0
+  );
+
+  const chain = buildProviderChain(selected, mode, promptChars);
+
+  if (!chain.length) {
+    throw new Error("No AI provider is configured. Add GROQ_API_KEY or GEMINI_API_KEY.");
+  }
+
+  const attempts = [];
+
+  for (const key of chain) {
+    const entry = MODEL_CATALOG[key];
+
+    try {
+      const answer = entry.provider === "groq"
+        ? await callGroq(fullMessages, process.env.GROQ_API_KEY, temperature, entry.model)
+        : await callGemini(fullMessages, process.env.GEMINI_API_KEY, system, temperature, entry.model);
+
+      if (!answer.trim()) throw new Error("Empty response.");
+
+      return { answer, provider: entry.provider, model: entry.model };
+    } catch (error) {
+      attempts.push(`${key}: ${error.message}`);
+    }
+  }
+
+  throw new Error("All AI providers failed. " + attempts.join(" | "));
+}
+
+/* ---------------- MEMORY 2.0 ---------------- */
+
+const MEMORY_CATEGORIES = [
+  "preference", "personal", "project", "skill", "goal", "general"
+];
+
+const STOPWORDS = new Set((
+  "the and for you are with this that have from your what when where which will would " +
+  "can could should about into just like make some more than then them they their there " +
+  "how why who not but all any was were has had its our out use using please " +
+  "hai hain tha thi kya aur ka ki ke ko se me mein ye wo yeh woh kar karo karna " +
+  "mera meri mere mujhe aap tum hum bhi nahi nahin ho hona raha rahi"
+).split(/\s+/));
+
+function tokenize(text) {
+  return (String(text || "").toLowerCase()
+    .match(/[a-z0-9\u0600-\u06ff]{3,}/g) || [])
+    .filter(word => !STOPWORDS.has(word));
+}
+
+/* Pick the memories that matter for this message instead of dumping them all */
+function selectMemories(memories, queryText, max = 10) {
+  const query = new Set(tokenize(queryText));
+
+  const scored = memories.map((item, index) => {
+    const words = new Set(tokenize(`${item.memory} ${item.category || ""}`));
+    let overlap = 0;
+    for (const word of query) if (words.has(word)) overlap++;
+
+    const core = ["preference", "personal"].includes(item.category) ? 1 : 0;
+    return { item, index, score: overlap * 3 + core };
+  });
+
+  const relevant = scored
+    .filter(entry => entry.score >= 3)
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .slice(0, 7);
+
+  const rest = scored
+    .filter(entry => entry.score < 3)
+    .sort((a, b) => b.score - a.score || a.index - b.index);
+
+  return [...relevant, ...rest].slice(0, max).map(entry => entry.item);
+}
+
+const SECRET_PATTERN =
+  /(password|passcode|\bpin\b|\bcvv\b|\botp\b|api[\s_-]?key|secret|token|credit card|card number|\b\d{9,}\b)/i;
+
+function normalizeMemory(text) {
+  return String(text).toLowerCase().replace(/[^a-z0-9\u0600-\u06ff]+/g, " ").trim();
+}
+
+function isDuplicateMemory(candidate, existing) {
+  const a = new Set(normalizeMemory(candidate).split(" "));
+
+  return existing.some(item => {
+    const b = new Set(normalizeMemory(item).split(" "));
+    const shared = [...a].filter(word => b.has(word)).length;
+    const union = new Set([...a, ...b]).size;
+    return union > 0 && shared / union >= 0.8;
+  });
+}
+
+async function extractAndSaveMemories(userId, token, text, existing) {
+  if (existing.length >= 100) {
+    return { saved: [], provider: null, model: null };
+  }
+
+  const known = existing.slice(0, 40).map(item => "- " + item.memory).join("\n") || "(none)";
+
+  const result = await generateWithChain({
+    selected: "groq",
+    temperature: 0,
+    system:
+      "You extract long-term facts about a user from a single message. " +
+      "Return ONLY a JSON array (max 3 items) of objects: " +
+      '{"memory": string, "category": "preference"|"personal"|"project"|"skill"|"goal"|"general"}. ' +
+      "Include only stable, useful facts the user stated about themselves: name, language or style " +
+      "preferences, profession, tools, projects, goals, tastes. " +
+      'Write each as a short third-person sentence, e.g. "User prefers answers in Roman Urdu." ' +
+      "Exclude: passwords, keys, financial or ID numbers, health or other sensitive details, " +
+      "one-off requests, questions, facts about other people, and anything already known. " +
+      "If nothing qualifies, return [].",
+    messages: [{
+      role: "user",
+      content: `Already known:\n${known}\n\nUser message:\n${text}`
+    }]
+  });
+
+  let items = [];
+
+  try {
+    const raw = result.answer;
+    items = JSON.parse(raw.slice(raw.indexOf("["), raw.lastIndexOf("]") + 1));
+  } catch {
+    return { saved: [], provider: result.provider, model: result.model };
+  }
+
+  if (!Array.isArray(items)) items = [];
+
+  const known_texts = existing.map(item => item.memory);
+  const saved = [];
+
+  for (const item of items.slice(0, 3)) {
+    const memory = String(item?.memory || "").trim();
+
+    if (memory.length < 5 || memory.length > 200) continue;
+    if (SECRET_PATTERN.test(memory)) continue;
+    if (isDuplicateMemory(memory, [...known_texts, ...saved.map(s => s.memory)])) continue;
+
+    const category = MEMORY_CATEGORIES.includes(item.category) ? item.category : "general";
+
+    await saveMemory(userId, memory, category, token);
+    saved.push({ memory, category });
+  }
+
+  return { saved, provider: result.provider, model: result.model };
+}
+
+/* ---------------- CHAT INTELLIGENCE ---------------- */
+
+async function summarizeChat(messages, selected) {
+  const list = Array.isArray(messages) ? messages.slice(-60) : [];
+
+  if (list.length < 2) {
+    throw new Error("This chat is too short to summarize.");
+  }
+
+  let transcript = list
+    .map(item => {
+      const who = item.role === "assistant" ? "Assistant" : "User";
+      return `${who}: ${stripSources(item.content).slice(0, 1500)}`;
+    })
+    .join("\n\n");
+
+  if (transcript.length > 24000) {
+    transcript = "...\n" + transcript.slice(-24000);
+  }
+
+  const result = await generateWithChain({
+    selected,
+    temperature: 0.3,
+    system:
+      "You summarize conversations. Write in the same language and script the user writes in. " +
+      "Use Markdown with these sections: **Overview** (2-3 sentences), **Key points** (bullets), " +
+      "**Decisions / action items** (bullets, omit if none), **Open questions** (bullets, omit if none). " +
+      "Then end with a line exactly 'Follow-up questions:' followed by 3 short questions the user might " +
+      "ask next, each on its own line starting with '- '. Be accurate; do not invent details.",
+    messages: [{ role: "user", content: `Conversation:\n\n${transcript}` }]
+  });
+
+  const parts = result.answer.split(/Follow-up questions:/i);
+  const summary = parts[0].trim();
+
+  const followUps = (parts[1] || "")
+    .split("\n")
+    .map(line => line.replace(/^[-*\d.\s]+/, "").trim())
+    .filter(line => line.length > 3)
+    .slice(0, 3);
+
+  return { summary, followUps, provider: result.provider, model: result.model };
+}
+
 /* ---------------- AUTHENTICATION ---------------- */
 
 async function authenticate(token) {
@@ -786,7 +1020,7 @@ export default async function handler(request) {
   let user = null;
   let currentAction = "chat";
   const startedAt = Date.now();
-  const LOGGED_ACTIONS = ["chat", "analyze_image", "generate_image", "ocr_document"];
+  const LOGGED_ACTIONS = ["chat", "analyze_image", "generate_image", "ocr_document", "chat_summary"];
 
   try {
     token = (request.headers.get("authorization") || "")
@@ -802,7 +1036,8 @@ export default async function handler(request) {
       webSearchEnabled = false,
       mode = "normal",
       temperature = 0.7,
-      model: selectedModel = "auto"
+      model: selectedModel = "auto",
+      chatSummary = ""
     } = body;
 
     currentAction = action;
@@ -816,6 +1051,49 @@ export default async function handler(request) {
     }
 
     /* Memory actions */
+
+    /* Memory 2.0: automatic extraction (called in the background by the app) */
+
+    if (action === "memory_extract") {
+      const text = String(message || "").trim().slice(0, 1500);
+
+      if (text.length < 15) return json(200, { saved: [] });
+
+      const existing = await listMemories(user.id, token);
+      const result = await extractAndSaveMemories(user.id, token, text, existing);
+
+      await logUsage(user.id, token, {
+        action: "memory_extract",
+        provider: result.provider,
+        model: result.model,
+        status: "ok",
+        latency_ms: Date.now() - startedAt,
+        input_chars: text.length
+      });
+
+      return json(200, { saved: result.saved });
+    }
+
+    /* Chat Intelligence: summary + follow-up suggestions */
+
+    if (action === "chat_summary") {
+      const result = await summarizeChat(messages, selectedModel);
+
+      await logUsage(user.id, token, {
+        action: "chat_summary",
+        provider: result.provider,
+        model: result.model,
+        status: "ok",
+        latency_ms: Date.now() - startedAt,
+        output_chars: result.summary.length
+      });
+
+      return json(200, {
+        success: true,
+        summary: result.summary,
+        followUps: result.followUps
+      });
+    }
 
     if (action === "memory_list") {
       return json(200, {
@@ -954,19 +1232,32 @@ export default async function handler(request) {
 
     let searchContext = "";
     let webSearchUsed = false;
+    let searchSources = [];
 
     if (webSearchEnabled) {
       try {
-        const results = await webSearch(message);
+        const results = await webSearch(message, mode === "research");
+
+        searchSources = results.results.filter(
+          item => /^https?:\/\//i.test(item.url || "")
+        );
+
+        const numbered = searchSources
+          .map((item, index) =>
+            `[${index + 1}] ${item.title}\nURL: ${item.url}\n${String(item.content || "").slice(0, 900)}`
+          )
+          .join("\n\n");
 
         searchContext = `
-Web search results:
-${JSON.stringify(results)}
+Web search results (numbered sources):
+${numbered}
 
-Use these search results carefully.
-Do not invent sources or claim that you opened pages you did not open.
-If the results do not answer the question, say so.
-`;
+${results.answer ? "Search engine summary: " + results.answer + "\n\n" : ""}Rules for using these results:
+- Base factual claims on these sources and cite them inline as [1], [2] matching the numbers above.
+- Do not write your own source list; the app appends one automatically.
+- Do not invent sources or claim to have opened pages beyond these snippets.
+- If the results do not answer the question, say so.
+${mode === "research" ? "- Structure the answer as: a short summary, key findings with citations, then disagreements or gaps in the evidence.\n" : ""}`;
 
         webSearchUsed = true;
       } catch (error) {
@@ -987,12 +1278,20 @@ Do not pretend that a web search succeeded.
     try {
       const memories = await listMemories(user.id, token);
 
-      if (memories.length) {
+      const lastUserTurn = [...(Array.isArray(messages) ? messages : [])]
+        .reverse()
+        .find(item => item.role === "user");
+
+      const chosen = selectMemories(
+        memories,
+        `${message} ${lastUserTurn ? String(lastUserTurn.content || "").slice(0, 500) : ""}`
+      );
+
+      if (chosen.length) {
         memoryContext =
-          "\nRelevant saved user memories:\n" +
-          memories
-            .slice(0, 30)
-            .map(item => "- " + item.memory)
+          "\nWhat you know about this user (use only when relevant, never recite it):\n" +
+          chosen
+            .map(item => `- [${item.category || "general"}] ${item.memory}`)
             .join("\n");
 
         memoryUsed = true;
@@ -1000,6 +1299,11 @@ Do not pretend that a web search succeeded.
     } catch (error) {
       console.error("Memory loading error:", error.message);
     }
+
+    const summaryContext = typeof chatSummary === "string" && chatSummary.trim()
+      ? "\nSummary of the earlier part of this conversation (older messages are not shown):\n" +
+        chatSummary.trim().slice(0, 4000)
+      : "";
 
     const profileContext = getProfilePrompt(profile);
     const modeContext = getModePrompt(mode);
@@ -1009,13 +1313,14 @@ Do not pretend that a web search succeeded.
       modeContext,
       profileContext,
       memoryContext,
+      summaryContext,
       searchContext
     ].filter(Boolean).join("\n\n");
 
     const conversation = Array.isArray(messages)
       ? messages.slice(-20).map(item => ({
           role: item.role === "assistant" ? "assistant" : "user",
-          content: String(item.content || "").slice(0, 12000)
+          content: stripSources(String(item.content || "")).slice(0, 12000)
         }))
       : [];
 
@@ -1095,6 +1400,10 @@ Do not pretend that a web search succeeded.
 
     const fallbackUsed = usedKey !== chain[0];
 
+    if (webSearchUsed && searchSources.length) {
+      answer += buildSourcesMarkdown(searchSources);
+    }
+
     await logUsage(user.id, token, {
       action: "chat",
       provider,
@@ -1115,7 +1424,8 @@ Do not pretend that a web search succeeded.
       fallbackUsed,
       memoryUsed,
       webSearchUsed,
-      profileUsed: Boolean(profileContext)
+      profileUsed: Boolean(profileContext),
+      sources: searchSources.map(item => ({ title: item.title, url: item.url }))
     });
 
   } catch (error) {
