@@ -43,6 +43,8 @@ button{cursor:pointer}
 .chat-item .chat-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
 .chat-item .pin{color:#f5c76a}
 .side-bottom{border-top:1px solid var(--line);padding-top:12px}
+.legal-links{font-size:11px;color:var(--muted);text-align:center;margin-top:10px;line-height:1.7}
+.legal-links a{color:var(--muted);text-decoration:underline}
 .side-btn{width:100%;background:none;border:0;color:var(--muted);padding:10px;text-align:left;border-radius:9px}
 .main{flex:1;display:flex;flex-direction:column;min-width:0}
 .topbar{height:62px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 22px;flex-shrink:0}
@@ -189,6 +191,11 @@ body.light .message-content pre{background:#f0f1f6;color:#202234}
       <button class="side-btn" id="memoryBtn">✦ &nbsp; Memories</button>
       <button class="side-btn" id="settingsBtn">⚙ &nbsp; Settings</button>
       <button class="side-btn" id="accountBtn">◉ &nbsp; Account / Sign in</button>
+      <div class="legal-links">
+        <a href="/about.html" target="_blank" rel="noopener">About</a> ·
+        <a href="/privacy.html" target="_blank" rel="noopener">Privacy</a> ·
+        <a href="/terms.html" target="_blank" rel="noopener">Terms</a>
+      </div>
     </div>
   </aside>
 
@@ -269,6 +276,10 @@ body.light .message-content pre{background:#f0f1f6;color:#202234}
     <button class="secondary" id="authSwitch">Create an account</button>
     <button class="side-btn" id="forgotBtn">Forgot password?</button>
     <button class="side-btn" id="guestBtn">Continue browsing</button>
+    <p class="legal-links">By continuing you agree to our
+      <a href="/terms.html" target="_blank" rel="noopener">Terms of Service</a> and
+      <a href="/privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.
+      <a href="/about.html" target="_blank" rel="noopener">About QuBix AI</a></p>
   </div>
 </div>
 
