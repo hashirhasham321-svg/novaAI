@@ -669,7 +669,10 @@ async function usageSummary(userId, token, days = 30) {
 const SOURCES_TAIL = /\n\n---\n\*\*Sources\*\*[\s\S]*$/;
 
 function stripSources(text) {
-  return String(text || "").replace(SOURCES_TAIL, "");
+  return String(text || "")
+    .replace(SOURCES_TAIL, "")
+    .replace(/\n\n\[Open full size\]\([^)]*\)/g, "")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "[image]");
 }
 
 function buildSourcesMarkdown(sources) {
