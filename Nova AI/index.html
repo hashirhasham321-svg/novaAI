@@ -80,6 +80,7 @@ select,.select{background:var(--panel);border:1px solid var(--line);border-radiu
 .message-actions{display:flex;gap:5px;margin-top:8px;flex-wrap:wrap}
 .message-actions button{background:transparent;border:1px solid var(--line);color:var(--muted);border-radius:7px;padding:5px 8px;font-size:11px}
 .message-actions button:hover{color:var(--text);background:var(--panel2)}
+.message-content img{max-width:100%;border-radius:12px;margin-top:8px;display:block}
 .generated-image{max-width:100%;border-radius:12px;margin-top:10px;display:block}.image-download{display:inline-block;margin-top:8px;color:#a99cff;font-size:13px}.stop-btn{background:#713b45;color:#fff;border:0;border-radius:9px;padding:9px 12px;font-weight:600}.voice-language{max-width:125px;font-size:11px;padding:7px}
 .composer-wrap{position:fixed;bottom:0;left:270px;right:0;padding:15px 20px 18px;background:linear-gradient(transparent,var(--bg) 18%)}
 .composer{max-width:850px;margin:auto;background:var(--panel);border:1px solid var(--line);border-radius:17px;padding:11px 13px;box-shadow:var(--shadow)}
@@ -815,6 +816,7 @@ async function copyText(text) {
 
   $("deleteChat").onclick=async()=>{
     if(!confirm("Delete this chat and its messages? This cannot be undone.")) return;
+    await removeChatImages(chat.id);
     const {error}=await db.from("messages").delete()
       .eq("chat_id",chat.id).eq("user_id",currentUser.id);
     if(error) return toast(error.message);
@@ -871,9 +873,19 @@ async function shareChat(id) {
     <h2>Share conversation</h2>
     <p style="color:var(--muted)">Create a read-only public link to this chat.</p>
     <div id="shareStatus" style="font-size:13px;color:var(--muted);margin:14px 0">Creating share link...</div>
-    <div class="modal-actions"><button class="secondary" id="closeShare">Close</button></div>
+    <div class="modal-actions">
+      <button class="secondary danger" id="stopShare">Stop sharing</button>
+      <button class="secondary" id="closeShare">Close</button>
+    </div>
   `);
   $("closeShare").onclick=closeModal;
+  $("stopShare").onclick=async()=>{
+    if(!confirm("Disable ALL share links for this chat? Anyone who has a link will no longer be able to open it.")) return;
+    const {error}=await db.from("qubix_shares").delete().eq("chat_id",id).eq("user_id",currentUser.id);
+    if(error) return toast(error.message);
+    closeModal();
+    toast("Sharing stopped. Old links no longer work.");
+  };
 
   try {
     const {data,error}=await db.from("qubix_shares")
@@ -1595,7 +1607,46 @@ async function handleFile(file) {
     $("fileChip").hidden=true;
     toast(error.message||"Could not read this file.");
   }
-}async function generateImageFromPrompt(promptText) {
+}
+/* ---------- Permanent image storage (Supabase Storage bucket "qubix-images") ---------- */
+
+const IMAGE_BUCKET="qubix-images";
+const IMAGE_URL_RE=/\/storage\/v1\/object\/public\/qubix-images\/([^)\s"']+)/g;
+
+async function uploadGeneratedImage(image) {
+  const mime=image.mimeType||"image/png";
+  const ext=mime.includes("jpeg")?"jpg":mime.includes("webp")?"webp":"png";
+  const bytes=Uint8Array.from(atob(image.data),c=>c.charCodeAt(0));
+  const path=currentUser.id+"/"+crypto.randomUUID()+"."+ext;
+  const {error}=await db.storage.from(IMAGE_BUCKET).upload(
+    path,
+    new Blob([bytes],{type:mime}),
+    {contentType:mime,cacheControl:"31536000"}
+  );
+  if(error) throw error;
+  return db.storage.from(IMAGE_BUCKET).getPublicUrl(path).data.publicUrl;
+}
+
+/* Remove a chat's stored images (best effort) when the chat is deleted */
+async function removeChatImages(chatId) {
+  try {
+    const {data}=await db.from("messages").select("content")
+      .eq("chat_id",chatId).eq("user_id",currentUser.id)
+      .like("content","%/qubix-images/%");
+    const paths=new Set();
+    (data||[]).forEach(m=>{
+      for(const match of String(m.content).matchAll(IMAGE_URL_RE)) {
+        const path=decodeURIComponent(match[1]);
+        if(path.startsWith(currentUser.id+"/")) paths.add(path);
+      }
+    });
+    if(paths.size) await db.storage.from(IMAGE_BUCKET).remove([...paths]);
+  } catch(error) {
+    console.error("Could not remove chat images:",error);
+  }
+}
+
+async function generateImageFromPrompt(promptText) {
   if(!currentUser) {
     toast("Sign in to generate images.");
     setAuthScreen(true);
@@ -1622,25 +1673,37 @@ async function handleFile(file) {
     if(!data.image?.data) throw new Error("No image data returned. Check Gemini image model access and quota.");
     const mime=data.image.mimeType||"image/png";
     const imageUrl="data:"+mime+";base64,"+data.image.data;
-    const assistantMessage={role:"assistant",content:"Your image has been generated." , imageData:imageUrl};
+    let savedUrl=null;
+    try { savedUrl=await uploadGeneratedImage(data.image); }
+    catch(uploadError) { console.error("Image upload failed:",uploadError); }
+
+    const alt=promptText.replace(/[\[\]()\n]/g," ").slice(0,80)||"Generated image";
+    const assistantMessage=savedUrl
+      ?{role:"assistant",content:"Your image has been generated.\n\n!["+alt+"]("+savedUrl+")\n\n[Open full size]("+savedUrl+")"}
+      :{role:"assistant",content:"Your image has been generated.",imageData:imageUrl};
     currentMessages.push(assistantMessage);
     await saveMessage("assistant",assistantMessage.content);
     status.remove();
     renderMessages();
-    const last=$("messages").lastElementChild;
-    const image=document.createElement("img");
-    image.className="generated-image";
-    image.src=imageUrl;
-    image.alt="Generated image for: "+promptText;
-    const download=document.createElement("a");
-    download.className="image-download";
-    download.href=imageUrl;
-    download.download="qubix-generated-image."+(mime.includes("jpeg")?"jpg":mime.includes("webp")?"webp":"png");
-    download.textContent="↓ Download image";
-    const messageContent=last?.querySelector(".message-content");
-    if(messageContent) messageContent.append(image,download);
+
+    if(!savedUrl) {
+      /* Fallback: show the image for this session only */
+      const last=$("messages").lastElementChild;
+      const image=document.createElement("img");
+      image.className="generated-image";
+      image.src=imageUrl;
+      image.alt="Generated image for: "+promptText;
+      const download=document.createElement("a");
+      download.className="image-download";
+      download.href=imageUrl;
+      download.download="qubix-generated-image."+(mime.includes("jpeg")?"jpg":mime.includes("webp")?"webp":"png");
+      download.textContent="↓ Download image";
+      const messageContent=last?.querySelector(".message-content");
+      if(messageContent) messageContent.append(image,download);
+    }
+
     $("content").scrollTop=$("content").scrollHeight;
-    toast("Image generated successfully.");
+    toast(savedUrl?"Image generated and saved.":"Image generated, but it could not be saved. Download it now.");
   } catch(error) {
     status.remove();
     if(error.name==="AbortError") {
