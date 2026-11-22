@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#10111a">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
 <title>Shared conversation — QuBix AI</title>
 <style>
 *{box-sizing:border-box}
@@ -44,6 +46,13 @@ footer{text-align:center;color:#777b90;font-size:12px;padding:35px}
 <script>
 const SUPABASE_URL = "https://tehtdnaziyjwuacfxzsk.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_k50vs5oP1POySSKevkaSYw_fgPn7O_T";
+
+DOMPurify.addHook("afterSanitizeAttributes", node => {
+  if (node.tagName === "A") {
+    node.setAttribute("target", "_blank");
+    node.setAttribute("rel", "noopener noreferrer");
+  }
+});
 
 async function loadSharedChat() {
   const token = new URLSearchParams(location.search).get("token");
