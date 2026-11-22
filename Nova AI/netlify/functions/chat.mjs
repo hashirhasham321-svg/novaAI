@@ -265,44 +265,134 @@ async function generateImageWithModel(prompt, apiKey, model) {
   };
 }
 
+/* Free image generation: Cloudflare Workers AI (FLUX.1 schnell) */
+
+const CLOUDFLARE_IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell";
+
+const NON_ENGLISH_HINT =
+  /[^\x00-\x7F]|\b(ek|ki|ka|ke|ko|mein|hai|hain|bana|banao|banaye|tasveer|wala|wali|aur|par|saath|sath|ladka|ladki|shehar|pahad|aasman)\b/i;
+
+/* FLUX understands English best, so convert Urdu / Roman Urdu prompts first */
+async function toEnglishImagePrompt(prompt) {
+  if (!NON_ENGLISH_HINT.test(prompt)) return prompt;
+
+  try {
+    const result = await generateWithChain({
+      selected: "groq",
+      temperature: 0.2,
+      system:
+        "Convert the user's image request into one clear, detailed English prompt for an image " +
+        "generation model. Keep the subject and style the user asked for. Output only the prompt.",
+      messages: [{ role: "user", content: prompt }]
+    });
+
+    const english = result.answer.trim().replace(/^["']|["']$/g, "");
+    return english && english.length < 1500 ? english : prompt;
+  } catch {
+    return prompt;
+  }
+}
+
+function detectImageMime(base64) {
+  if (base64.startsWith("iVBOR")) return "image/png";
+  if (base64.startsWith("UklGR")) return "image/webp";
+  return "image/jpeg";
+}
+
+async function generateImageWithCloudflare(prompt) {
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+
+  const response = await fetchT(
+    `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${CLOUDFLARE_IMAGE_MODEL}`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiToken}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ prompt: prompt.slice(0, 2000), steps: 6 })
+    },
+    25000
+  );
+
+  const contentType = response.headers.get("content-type") || "";
+
+  /* Some responses return the raw image bytes */
+  if (response.ok && contentType.startsWith("image/")) {
+    const bytes = Buffer.from(await response.arrayBuffer());
+    return {
+      mimeType: contentType.split(";")[0],
+      data: bytes.toString("base64"),
+      model: CLOUDFLARE_IMAGE_MODEL
+    };
+  }
+
+  let data;
+
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error(`Cloudflare returned an unreadable response (${response.status}).`);
+  }
+
+  if (!response.ok || data.success === false) {
+    throw new Error(
+      data.errors?.[0]?.message || `Cloudflare image generation failed (${response.status}).`
+    );
+  }
+
+  const image = data.result?.image;
+
+  if (!image) {
+    throw new Error("Cloudflare did not return an image.");
+  }
+
+  return {
+    mimeType: detectImageMime(image),
+    data: image,
+    model: CLOUDFLARE_IMAGE_MODEL
+  };
+}
+
 async function generateImage(prompt) {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const hasCloudflare = Boolean(
+    process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN
+  );
+  const hasGemini = Boolean(process.env.GEMINI_API_KEY);
 
-  if (!apiKey) {
+  if (!hasCloudflare && !hasGemini) {
     throw new Error(
-      "GEMINI_API_KEY is missing in Netlify environment variables."
+      "Image generation is not configured. Add CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN " +
+      "(free) in Netlify environment variables."
     );
   }
 
-  let firstError;
+  const short = (error) => String(error.message || error).slice(0, 200);
+  const failures = [];
 
-  try {
-    return await generateImageWithModel(
-      prompt,
-      apiKey,
-      MODELS.imagePrimary
-    );
-  } catch (error) {
-    firstError = error;
-    console.error("Primary image model failed:", error.message);
+  if (hasCloudflare) {
+    try {
+      return await generateImageWithCloudflare(await toEnglishImagePrompt(prompt));
+    } catch (error) {
+      failures.push("Cloudflare: " + short(error));
+      console.error("Cloudflare image failed:", error.message);
+    }
   }
 
-  try {
-    return await generateImageWithModel(
-      prompt,
-      apiKey,
-      MODELS.imageFallback
-    );
-  } catch (fallbackError) {
-    console.error("Fallback image model failed:", fallbackError.message);
-
-    throw new Error(
-      "Image generation failed. Primary: " +
-      firstError.message +
-      " | Fallback: " +
-      fallbackError.message
-    );
+  /* Gemini image models need a paid Google plan; used only if available */
+  if (hasGemini) {
+    for (const model of [MODELS.imagePrimary, MODELS.imageFallback]) {
+      try {
+        return await generateImageWithModel(prompt, process.env.GEMINI_API_KEY, model);
+      } catch (error) {
+        failures.push(`${model}: ${short(error)}`);
+        console.error(`Image model ${model} failed:`, error.message);
+      }
+    }
   }
+
+  throw new Error("Image generation failed. " + failures.join(" | "));
 }
 
 /* ---------------- IMAGE UNDERSTANDING ---------------- */
